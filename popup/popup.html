@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub AI Context Builder</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 id="repo-title">Loading Repository...</h1>
+            <div class="actions">
+                <button id="copy-button" title="Copy selected file content to clipboard" disabled>
+                    <span class="icon">📋</span> Copy Context
+                </button>
+                <button id="refresh-button" title="Refresh file tree">
+                    <span class="icon">🔄</span> Refresh
+                </button>
+            </div>
+        </div>
+
+        <div id="status-message" class="status hidden"></div>
+        <div id="error-message" class="error hidden"></div>
+
+        <div class="controls">
+            <button id="expand-all" title="Expand all folders">Expand All</button>
+            <button id="collapse-all" title="Collapse all folders">Collapse All</button>
+            <div class="selection-info">
+                 <span id="selected-count">Selected: 0 files</span> |
+                 <span id="selected-size">Total Size: 0 B</span>
+            </div>
+        </div>
+
+
+        <div id="file-tree-container">
+            <!-- File tree will be dynamically generated here -->
+            <div class="loading-indicator">Loading file tree...</div>
+        </div>
+
+        <div class="footer">
+            <!-- Maybe add links or other info later -->
+             <span id="perf-stats" class="perf-stats"></span> <!-- Placeholder for performance info -->
+        </div>
+
+    </div>
+    <!-- Import logic script as module -->
+    <script type="module" src="popup.js"></script>
+</body>
+</html>
