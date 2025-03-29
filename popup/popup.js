@@ -12,8 +12,8 @@ const COLLAPSED_ICON = '\u25B6'; // ►
 const EXPANDED_ICON = '\u25BC'; // ▼
 const FOLDER_ICON = '\u{1F4C1}'; // 📁
 const FILE_ICON = '\u{1F4C4}'; // 📄
-const REFRESH_ICON = '↺'; // Or use the existing entity if preferred: '↻' / '⟳'
-const COPY_ICON = '📋'; // Or use the existing entity if preferred: '' / '📋'
+const REFRESH_ICON = '\u21BB'; // Or use the existing entity if preferred: '↻' / '↺'
+const COPY_ICON = '\u{1F4CB}'; // Or use the existing entity if preferred: '📋' / '📎'
 const DEFAULT_LOAD_TIME_TEXT = "";
 const CHECKBOX_DEBOUNCE_DELAY = 250; // ms delay for debouncing checkbox persistence
 
@@ -511,10 +511,18 @@ function createTreeNodesRecursive(node, parentElement) {
 
         const li = document.createElement('li');
         li.className = `tree-node ${isFolder ? 'folder' : 'file'}`;
+        li.dataset.path = nodeKey;
         if (isFolder) {
             li.classList.add('collapsed'); // Folders start collapsed
         }
-        li.dataset.path = nodeKey;
+
+        // --- Structure Change: Use a div for the main row content ---
+        const nodeContentRow = document.createElement('div');
+        nodeContentRow.className = 'tree-node-content'; // Add class for potential styling
+        // Apply flex directly to this row div for alignment
+        nodeContentRow.style.display = 'flex';
+        nodeContentRow.style.alignItems = 'center';
+        nodeContentRow.style.padding = '3px 0'; // Mimic old padding
 
         // Checkbox
         const checkbox = document.createElement('input');
@@ -522,35 +530,52 @@ function createTreeNodesRecursive(node, parentElement) {
         const safeId = `cb_${nodeKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
         checkbox.id = safeId;
         checkbox.dataset.path = nodeKey;
-        checkbox.checked = !!selectionState[nodeKey]; // Set checked based on state (default false if undefined)
+        checkbox.checked = !!selectionState[nodeKey]; // Set checked based on state
         checkbox.indeterminate = false; // Will be updated below if needed
+        checkbox.style.marginRight = '6px'; // Keep original margin
+        checkbox.style.flexShrink = '0'; // Keep original shrink rule
+        nodeContentRow.appendChild(checkbox); // Add checkbox to the row div
 
-        // Determine folder state (checked/unchecked/indeterminate) after creation
-        if (isFolder) {
-             updateFolderCheckboxState(checkbox, nodeKey);
-        }
-
-        // Label container
-        const label = document.createElement('label');
-        label.htmlFor = safeId;
-
-        // Toggler (for folders with children)
-        const hasChildren = isFolder && itemNode.__children && Object.keys(itemNode.__children).length > 0;
+        // Toggler (for folders with children) - Now outside the label
         const toggler = document.createElement('span');
         toggler.className = 'toggler';
+        const hasChildren = isFolder && itemNode.__children && Object.keys(itemNode.__children).length > 0;
         if (hasChildren) {
             toggler.textContent = COLLAPSED_ICON;
             toggler.title = "Expand/Collapse";
         } else {
-             toggler.innerHTML = ' '; // Non-breaking space for alignment
-             if(isFolder) li.classList.remove('collapsed'); // Ensure empty folders aren't styled as collapsed
+             // Use a non-breaking space for alignment, ensure it takes up space like the icon
+             toggler.innerHTML = ' '; // Non-breaking space
+             toggler.style.display = 'inline-block'; // Needed for width/height
+             toggler.style.width = '1em'; // Reserve space similar to icon
+             toggler.style.textAlign = 'center'; // Center space if needed
+             if(isFolder) li.classList.remove('collapsed'); // Ensure empty folders aren't styled as collapsed visually
         }
-        label.appendChild(toggler);
+        toggler.style.marginRight = '4px'; // Keep original margin
+        toggler.style.cursor = 'pointer'; // Ensure cursor indicates interactivity
+        toggler.style.flexShrink = '0'; // Keep original shrink rule
+        nodeContentRow.appendChild(toggler); // Add toggler to the row div
+
+        // Label container (now only contains icon, name, meta)
+        const label = document.createElement('label');
+        label.htmlFor = safeId;
+        // Apply flex to label itself for internal content alignment
+        label.style.display = 'flex';
+        label.style.alignItems = 'center';
+        label.style.flexGrow = '1'; // Allow label to take remaining space
+        label.style.overflow = 'hidden'; // Keep overflow handling
+        label.style.cursor = 'pointer'; // Standard label cursor
 
         // Icon (folder/file)
         const icon = document.createElement('span');
         icon.className = 'node-icon';
         icon.textContent = isFolder ? FOLDER_ICON : FILE_ICON;
+        icon.style.marginRight = '4px'; // Keep original margin
+        icon.style.width = '16px'; // Keep original width
+        icon.style.height = '16px'; // Keep original height
+        icon.style.display = 'inline-block'; // Keep original display
+        icon.style.verticalAlign = 'middle'; // Keep original align
+        icon.style.flexShrink = '0'; // Keep original shrink
         label.appendChild(icon);
 
         // Name
@@ -558,6 +583,10 @@ function createTreeNodesRecursive(node, parentElement) {
         nameSpan.className = 'node-name';
         nameSpan.textContent = key; // Display the base name part
         nameSpan.title = itemData.path; // Full path in tooltip
+        nameSpan.style.whiteSpace = 'nowrap'; // Keep original styles
+        nameSpan.style.overflow = 'hidden';
+        nameSpan.style.textOverflow = 'ellipsis';
+        nameSpan.style.marginRight = '5px';
         label.appendChild(nameSpan);
 
         // Metadata (size for files)
@@ -566,18 +595,37 @@ function createTreeNodesRecursive(node, parentElement) {
         if (!isFolder && itemData.size != null) {
             metaSpan.textContent = formatBytes(itemData.size);
         }
+        // Keep original meta styles
+        metaSpan.style.fontSize = '0.9em';
+        metaSpan.style.color = '#586069';
+        metaSpan.style.marginLeft = 'auto';
+        metaSpan.style.paddingLeft = '10px';
+        metaSpan.style.flexShrink = '0';
         label.appendChild(metaSpan);
 
-        // Assemble LI
-        li.appendChild(checkbox);
-        li.appendChild(label);
+        // Add label (with its contents) to the row div
+        nodeContentRow.appendChild(label);
+
+        // Add the complete row div to the LI
+        li.appendChild(nodeContentRow);
+
+        // Append the LI to the parent UL
         parentElement.appendChild(li);
+
+        // Determine folder checkbox state AFTER initial creation and adding to DOM/parent
+        if (isFolder) {
+             updateFolderCheckboxState(checkbox, nodeKey);
+        }
 
         // Recurse for children if it's a folder with children
         if (hasChildren) {
             const childrenUl = document.createElement('ul');
             childrenUl.className = 'tree-node-children';
-            // childrenUl.style.display = 'none'; // Let CSS handle visibility via .collapsed
+            // Apply indentation and reset list styles
+            childrenUl.style.marginLeft = '20px'; // Adjust as needed
+            childrenUl.style.paddingLeft = '0';
+            childrenUl.style.listStyle = 'none';
+            // Append children UL directly to the LI (will appear below the nodeContentRow)
             li.appendChild(childrenUl);
             createTreeNodesRecursive(itemNode.__children, childrenUl);
         }
@@ -637,18 +685,14 @@ function handleCheckboxChange(event) {
     const pathKey = checkbox.dataset.path;
     let isChecked = checkbox.checked;
 
-    // log('log', `Checkbox changed: ${pathKey}, Checked: ${isChecked}, Indeterminate: ${checkbox.indeterminate}`);
+    log('log', `Checkbox changed: ${pathKey}, Checked: ${isChecked}, Indeterminate: ${checkbox.indeterminate}`);
 
     // When an indeterminate checkbox is clicked, it becomes checked (or unchecked depending on browser, usually checked)
     // Clear indeterminate state explicitly
     if (checkbox.indeterminate) {
         checkbox.indeterminate = false;
-        // Some browsers might make it unchecked, some checked. Let's force it to checked state
-        // as the user action implies selecting the mixed content.
-        // However, the default browser behavior is usually sufficient.
-        // If issues arise, uncomment:
-        // isChecked = true;
-        // checkbox.checked = true;
+        // Force the state to match the visual change (usually becomes checked)
+        isChecked = checkbox.checked;
     }
 
     // Update state for the clicked item
@@ -696,7 +740,7 @@ function propagateStateToDescendants(folderPathKey, isChecked) {
 }
 
 /**
- * Updates the checked and indeterminate state of ancestor folders based on their children.
+ * Updates the checked and indeterminate state of ancestor folders based on their children's states.
  * @param {string} changedPathKey - The path key of the item that triggered the update.
  */
 function propagateStateToAncestors(changedPathKey) {
@@ -740,7 +784,7 @@ function updateFolderCheckboxState(checkbox, folderPathKey) {
 
     const childrenStates = directChildrenKeys.map(k => selectionState[k]);
     const allChecked = childrenStates.every(state => state === true);
-    const noneChecked = childrenStates.every(state => state === false); // Or more accurately, state is not true
+    const noneChecked = childrenStates.every(state => state === false || state === undefined); // Consider undefined as not checked
 
     if (allChecked) {
          selectionState[folderPathKey] = true;
@@ -768,28 +812,31 @@ function updateFolderCheckboxState(checkbox, folderPathKey) {
  * @param {Event} event - The click event object.
  */
 function handleTreeClick(event) {
-    const toggler = event.target.closest('.toggler');
+    // Check if the click target is specifically the toggler span
+    if (event.target.classList.contains('toggler')) {
+        const toggler = event.target;
+        const nodeLi = toggler.closest('.tree-node.folder'); // Find the parent LI
 
-    if (toggler && toggler.closest('.tree-node.folder')) {
-        const nodeLi = toggler.closest('.tree-node.folder');
-        const childrenUl = nodeLi.querySelector(':scope > .tree-node-children'); // Direct child UL
-
-        if (nodeLi && childrenUl) { // Only toggle if there are children to show/hide
-             log('log', `Toggler clicked for: ${nodeLi.dataset.path}`);
+        // Ensure we are on a folder and it actually has children to toggle
+        if (nodeLi && nodeLi.querySelector(':scope > .tree-node-children')) {
+            log('log', `Toggler clicked for: ${nodeLi.dataset.path}`);
             const isCollapsed = nodeLi.classList.toggle('collapsed');
             toggler.textContent = isCollapsed ? COLLAPSED_ICON : EXPANDED_ICON;
 
-            // Prevent this click from bubbling up to the label,
-            // which could trigger the checkbox via the label's 'for' attribute.
+            // --- CRITICAL CHANGE ---
+            // Stop the event propagation HERE, so the click on the toggler
+            // doesn't bubble up and trigger the label or any other handlers unintentionally.
             event.stopPropagation();
             // log('log', `Stopped event propagation for toggler click on ${nodeLi.dataset.path}`);
         } else if (nodeLi) {
              // Clicked toggler area on a folder with no children, do nothing significant.
-             // Stop propagation to prevent label click if desired.
+             // Still stop propagation just in case.
              event.stopPropagation();
         }
     }
-    // If the click was not on a toggler, let it bubble (e.g., to label for checkbox).
+    // If the click was not on a toggler, let it bubble.
+    // This allows clicks on the label (icon, name, meta) to still trigger the checkbox via the label's 'for' attribute,
+    // and clicks on the checkbox itself to work as expected.
 }
 
 
@@ -916,7 +963,6 @@ async function handleCopyClick() {
         if (result.content !== null) { // Check for non-error results
             // Sanitize null bytes which can cause issues with clipboard/display
             const sanitizedContent = result.content.replace(/\0/g, '');
-             // --- *** THE KEY CHANGE IS HERE *** ---
             formattedContext += `--- File: ${result.path} ---\n`; // New format
             formattedContext += `${sanitizedContent}\n\n`;
         } else {
@@ -1006,7 +1052,7 @@ async function notifyUser(title, message) {
               chrome.notifications.create({
                  type: 'basic',
                  // Ensure icons are defined in manifest.json under 'icons' and potentially 'web_accessible_resources' if needed elsewhere
-                 iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                 iconUrl: chrome.runtime.getURL('icons/icon48.png'), // Make sure you have icons/icon48.png
                  title: title,
                  message: message
              }, (notificationId) => {
@@ -1083,11 +1129,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (expandAllButton) expandAllButton.addEventListener('click', handleExpandAll);
     if (collapseAllButton) collapseAllButton.addEventListener('click', handleCollapseAll);
 
-    // Setup initial icon text content (if using text icons)
-    // Example: If refresh button span needs text:
-    // const refreshIconSpan = refreshButton?.querySelector('.icon');
-    // if (refreshIconSpan) refreshIconSpan.textContent = REFRESH_ICON;
-    // Do similarly for copy button if needed. If using background images/SVG, this isn't necessary.
+    // Use more common unicode icons or HTML entities if needed
+    const copyButtonIcon = copyButton?.querySelector('.icon');
+    if (copyButtonIcon) copyButtonIcon.textContent = COPY_ICON; // Set icon text
+    const refreshButtonIcon = refreshButton?.querySelector('.icon');
+    if (refreshButtonIcon) refreshButtonIcon.textContent = REFRESH_ICON; // Set icon text
+
 
     log('info', "Static button listeners attached.");
     // Tree listeners are attached dynamically after rendering
