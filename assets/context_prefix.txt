@@ -1,4 +1,4 @@
-please see below my project code and file locations, we will be working on this code together; familiarise yourself with the project and give me a brief overview of the project. once I have received this, I'll give you specific instructions on what we'll be working on:
+please see below my project code and file locations, we will be working on this code together; familiarise yourself with the project and give me a brief overview of the most prolific code smell based on the principles below. Once I have received this, I'll give you specific instructions on what we'll be working on:
 
 --- Core Development Principles for Our Collaboration ---
 - Simplicity & Clarity: Prioritize simple, logical, and easy-to-understand code. Break down complexity.
