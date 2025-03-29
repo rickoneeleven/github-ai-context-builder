@@ -41,8 +41,17 @@ async function initializeApp() {
         
         // Detect repository from active tab
         const repoInfo = await repository.detectRepository();
+        // If repoInfo is null, the repository module has already handled
+        // displaying the appropriate error message to the user
         if (!repoInfo) {
-            throw new Error("Repository detection failed");
+            // This is an expected condition for non-GitHub pages, not an error
+            log('info', "[Popup Coordinator] No valid repository detected. UI has been updated accordingly.");
+            // Always ensure refresh is enabled for recovery
+            ui.setRefreshDisabled(false);
+            
+            // End initialization gracefully without throwing an error
+            ui.updatePerformanceStats("");
+            return;
         }
         
         // Fetch repository data
@@ -107,8 +116,17 @@ async function initializeApp() {
         
     } catch (error) {
         log('error', "[Popup Coordinator] Initialization failed:", error);
-        ui.showError(`Initialization failed: ${error.message}`);
-        ui.updateRepoTitle("Error Loading");
+        
+        // Check for specific error messages that would have been handled by the repository module
+        if (error.message === "not_github" || error.message === "not_repo") {
+            // These are already handled by repository module, don't show additional errors
+            log('info', `[Popup Coordinator] Expected condition: ${error.message}. Already handled.`);
+        } else {
+            // For genuine errors, display the error message
+            ui.showError(`Initialization failed: ${error.message}`);
+            ui.updateRepoTitle("Error Loading");
+        }
+        
         ui.setControlsDisabled();
         ui.setRefreshDisabled(false); // Always allow refresh attempt
         ui.updatePerformanceStats(""); // Clear perf stats on error

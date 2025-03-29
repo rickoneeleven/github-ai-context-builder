@@ -100,6 +100,43 @@ function showError(message) {
     errorMessageElement.classList.add('error'); // Ensure error class is present
 }
 
+/**
+ * Displays a user-friendly error message with a title and descriptive text.
+ * These are expected conditions rather than actual errors, so we log as info.
+ * @param {string} title - The main error title (short)
+ * @param {string} description - More detailed explanation
+ */
+function showFriendlyError(title, description) {
+    if (!statusMessageElement || !errorMessageElement) {
+        log('warn', "[Popup UI] Status/Error element not found for friendly error message");
+        return;
+    }
+    
+    // Log as info since this is an expected condition, not an actual error
+    log('info', `[Popup UI] Friendly error displayed: ${title} - ${description}`);
+    
+    statusMessageElement.classList.add('hidden');
+    statusMessageElement.textContent = '';
+    
+    // Create formatted message with title and description
+    errorMessageElement.innerHTML = `
+        <strong>${title}</strong>
+        <p style="margin-top: 5px; margin-bottom: 0;">${description}</p>
+    `;
+    
+    errorMessageElement.classList.remove('hidden');
+    errorMessageElement.classList.add('error');
+    
+    // Hide the file tree and show appropriate UI state
+    if (fileTreeContainer) {
+        fileTreeContainer.innerHTML = '';
+    }
+
+    // Disable all controls except refresh
+    setControlsDisabled();
+    setRefreshDisabled(false);
+}
+
 /** Clears any currently displayed status or error messages. */
 function clearMessages() {
     if (statusMessageElement) {
@@ -231,6 +268,7 @@ export {
     initUI,
     showStatus,
     showError,
+    showFriendlyError,
     clearMessages,
     updateRepoTitle,
     updateSelectionInfo,

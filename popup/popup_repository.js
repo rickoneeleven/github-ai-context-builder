@@ -44,6 +44,21 @@ function resetRepositoryState() {
 }
 
 /**
+ * Checks if the URL is from a GitHub domain
+ * @param {string} url - The URL to check
+ * @returns {boolean} - True if the URL is from a GitHub domain
+ */
+function isGitHubUrl(url) {
+    try {
+        const urlObj = new URL(url);
+        // Check for github.com and any potential enterprise GitHub instances
+        return urlObj.hostname === 'github.com' || urlObj.hostname.endsWith('.github.com');
+    } catch (error) {
+        return false; // Invalid URL
+    }
+}
+
+/**
  * Detects the current repository from the active tab URL.
  * @returns {Promise<object>} Repository information object or null if detection fails
  */
@@ -54,16 +69,39 @@ async function detectRepository() {
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         
         if (!tabs || tabs.length === 0 || !tabs[0].url) {
-            throw new Error("Could not get active tab URL");
+            throw new Error("Could not access the current tab");
         }
         
         currentRepoUrl = tabs[0].url;
         log('info', `[Popup Repository] Current URL: ${currentRepoUrl}`);
         
+        // Check if we're on GitHub before trying to parse the repo URL
+        if (!isGitHubUrl(currentRepoUrl)) {
+            // This is not an error, just an expected condition
+            log('info', "[Popup Repository] Not on a GitHub site. URL:", currentRepoUrl);
+            
+            ui.updateRepoTitle("Not a Repository");
+            ui.showFriendlyError(
+                "This extension only works on GitHub repositories",
+                "Please navigate to a GitHub repository page and try again."
+            );
+            
+            return null;
+        }
+        
         const repoInfo = parseRepoUrl(currentRepoUrl);
         
         if (!repoInfo) {
-            throw new Error("URL does not look like a GitHub repository page");
+            // This is also not an error, just an expected condition
+            log('info', "[Popup Repository] Not on a GitHub repository page. URL:", currentRepoUrl);
+            
+            ui.updateRepoTitle("Not a Repository");
+            ui.showFriendlyError(
+                "Not a GitHub repository page",
+                "Please navigate to the main page or code tab of a GitHub repository."
+            );
+            
+            return null;
         }
         
         currentOwner = repoInfo.owner;
@@ -79,8 +117,9 @@ async function detectRepository() {
         };
         
     } catch (error) {
-        log('error', "[Popup Repository] Repository detection failed:", error);
-        ui.updateRepoTitle("Error Loading");
+        // Only use error logging for unexpected errors
+        log('error', "[Popup Repository] Unexpected error during repository detection:", error);
+        ui.updateRepoTitle("Error");
         ui.showError(`Repository detection failed: ${error.message}`);
         return null;
     }
