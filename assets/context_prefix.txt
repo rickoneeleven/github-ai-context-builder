@@ -10,3 +10,5 @@ please see below my project code and file locations, we will be working on this 
 - File Context Awareness: Users may exclude files; ask for clarification if essential context seems missing from provided code snippets.
 - Naming Consistency: Refactored file names should remain the same unless the fundamental purpose changes (avoid suffixes like `_new` or `_improved`).
 - Incremental Refactoring: When refactoring multiple files, we'll proceed one file at a time.
+- Full file refactors, do not share partially refactored files, as I will just add for the fully refactored version, which will have resulted in a waste of both our times. So just give fully refactored files in the first place, use change of thought to get to the final version of the refactored file before presenting it.
+- Try to keep file sizes to no more than 400 lines, when this limit is exceeded, consider logical breakout adhering to the principles above.

@@ -502,8 +502,8 @@ function createTreeNodesRecursive(node, parentElement) {
             toggler.textContent = '\u25B6'; // ▶ (Unicode escape)
             toggler.title = "Expand/Collapse";
         } else {
-             toggler.innerHTML = ' '; // Keep alignment
-             if(isFolder) li.classList.remove('collapsed');
+             toggler.innerHTML = ' '; // Keep alignment using non-breaking space
+             if(isFolder) li.classList.remove('collapsed'); // Ensure empty folders aren't styled as collapsed
         }
         label.appendChild(toggler);
 
@@ -541,8 +541,10 @@ function createTreeNodesRecursive(node, parentElement) {
 /** Adds event listeners to the dynamically generated tree using event delegation. */
 function addTreeEventListeners() {
      console.log("[Popup] Adding tree event listeners...");
+     // Remove existing listeners before adding new ones to prevent duplicates on refresh
      fileTreeContainer.removeEventListener('change', handleCheckboxChange);
      fileTreeContainer.removeEventListener('click', handleTreeClick);
+     // Add new listeners
      fileTreeContainer.addEventListener('change', handleCheckboxChange);
      fileTreeContainer.addEventListener('click', handleTreeClick);
      console.log("[Popup] Tree event listeners added.");
@@ -563,76 +565,90 @@ async function handleCheckboxChange(event) {
 
     console.log(`[Popup] Checkbox changed: ${pathKey}, New Checked State: ${isChecked}, Was Indeterminate: ${checkbox.indeterminate}`);
 
+    // If checkbox was indeterminate, clicking it should make it checked.
+    // Ensure indeterminate state is cleared when manually changed.
     if (checkbox.indeterminate) {
         checkbox.indeterminate = false;
+        // If it was indeterminate, clicking it means the user wants it checked now
+        // checkbox.checked = true; // The browser might already do this, but explicit is okay. Let's rely on the browser's `isChecked` which reflects the click.
     }
 
-    selectionState[pathKey] = isChecked;
+    selectionState[pathKey] = isChecked; // Update state based on the final checked status
 
     const isFolder = pathKey.endsWith('/');
     if (isFolder) {
+        // When a folder checkbox is explicitly changed, propagate to all descendants
         const descendants = getDescendantPaths(pathKey);
         descendants.forEach(descendantPathKey => {
             if (selectionState[descendantPathKey] !== isChecked) {
                  selectionState[descendantPathKey] = isChecked;
             }
+            // Update descendant checkboxes visually
             const descendantCheckbox = fileTreeContainer.querySelector(`input[type="checkbox"][data-path="${CSS.escape(descendantPathKey)}"]`);
             if (descendantCheckbox) {
                 descendantCheckbox.checked = isChecked;
-                descendantCheckbox.indeterminate = false;
+                descendantCheckbox.indeterminate = false; // Descendants reflect the parent's explicit state
             }
         });
         console.log(`[Popup] Propagated check state (${isChecked}) to ${descendants.length} descendants of ${pathKey}`);
     }
 
+    // Update parent folder states based on children states (upwards propagation)
     let parentPathKey = getParentFolderPath(pathKey);
     while (parentPathKey) {
         const parentCheckbox = fileTreeContainer.querySelector(`input[type="checkbox"][data-path="${CSS.escape(parentPathKey)}"]`);
         if (!parentCheckbox) {
              console.warn(`[Popup] Could not find parent checkbox DOM element for path: ${parentPathKey}`);
-             break;
+             break; // Stop propagation if parent DOM element is missing
         }
 
+        // Find direct children of this parent
         const directChildrenKeys = Object.keys(selectionState).filter(k => getParentFolderPath(k) === parentPathKey);
 
         if (directChildrenKeys.length === 0) {
-             console.warn(`[Popup] Parent folder ${parentPathKey} has no tracked children. Assuming state based on checkbox.`);
-             selectionState[parentPathKey] = parentCheckbox.checked;
+             // If a folder has no children (or they aren't in selectionState), its state is determined solely by its own checkbox
+             console.warn(`[Popup] Parent folder ${parentPathKey} has no tracked children. Its state is its own.`);
+             selectionState[parentPathKey] = parentCheckbox.checked; // Reflect its own checkbox state
              parentCheckbox.indeterminate = false;
         } else {
-            const childrenStates = directChildrenKeys.map(k => ({ state: selectionState[k], checkbox: fileTreeContainer.querySelector(`input[type="checkbox"][data-path="${CSS.escape(k)}"]`) }));
-            const allChecked = childrenStates.every(cs => cs.state === true && !cs.checkbox?.indeterminate);
-            const noneChecked = childrenStates.every(cs => cs.state === false && !cs.checkbox?.indeterminate);
-            const anyIndeterminate = childrenStates.some(cs => cs.checkbox?.indeterminate);
+            // Check the state of all direct children
+            const childrenStates = directChildrenKeys.map(k => selectionState[k]); // Get state from selectionState
+            const allChecked = childrenStates.every(state => state === true);
+            const noneChecked = childrenStates.every(state => state === false);
 
-            if (anyIndeterminate || (!allChecked && !noneChecked)) {
-                 selectionState[parentPathKey] = false;
-                 parentCheckbox.checked = false;
-                 parentCheckbox.indeterminate = true;
-                 console.log(`[Popup] Parent folder ${parentPathKey} set to indeterminate.`);
-            } else if (allChecked) {
-                selectionState[parentPathKey] = true;
-                parentCheckbox.checked = true;
-                parentCheckbox.indeterminate = false;
-                console.log(`[Popup] Parent folder ${parentPathKey} set to checked.`);
-            } else {
+            if (allChecked) {
+                 selectionState[parentPathKey] = true;
+                 parentCheckbox.checked = true;
+                 parentCheckbox.indeterminate = false;
+                 console.log(`[Popup] Parent folder ${parentPathKey} set to checked (all children checked).`);
+            } else if (noneChecked) {
                 selectionState[parentPathKey] = false;
                 parentCheckbox.checked = false;
                 parentCheckbox.indeterminate = false;
-                 console.log(`[Popup] Parent folder ${parentPathKey} set to unchecked.`);
+                 console.log(`[Popup] Parent folder ${parentPathKey} set to unchecked (all children unchecked).`);
+            } else {
+                 // Mixed states among children
+                 selectionState[parentPathKey] = false; // Treat indeterminate as 'not fully selected' in state
+                 parentCheckbox.checked = false;
+                 parentCheckbox.indeterminate = true;
+                 console.log(`[Popup] Parent folder ${parentPathKey} set to indeterminate (mixed children states).`);
             }
         }
+        // Move to the next parent up
         parentPathKey = getParentFolderPath(parentPathKey);
     }
 
+    // Recalculate totals and update UI display
     calculateSelectedTotals();
     updateSelectionInfo();
 
+    // Persist the updated selection state
     try {
         console.log("[Popup] Persisting updated selection state...");
         const success = await setRepoSelectionState(currentRepoUrl, selectionState);
         if (!success) {
             console.error("[Popup] Failed to persist selection state.");
+            // Show a temporary warning
             showStatus("Warning: Could not save selection state.", true);
             setTimeout(clearMessages, 3000);
         } else {
@@ -642,6 +658,7 @@ async function handleCheckboxChange(event) {
         console.error("[Popup] Error persisting selection state:", error);
         // Log stack trace for detailed debugging
         console.error(error.stack);
+         // Show a temporary warning
          showStatus("Warning: Error saving selection state.", true);
          setTimeout(clearMessages, 3000);
     }
@@ -651,11 +668,16 @@ async function handleCheckboxChange(event) {
 /**
  * Handles clicks within the tree container, specifically for toggling folders.
  * Uses Unicode escapes for icons.
+ * Stops event propagation if the click is specifically on the toggler element
+ * to prevent interference with the checkbox state.
  * @param {Event} event - The click event object.
  */
 function handleTreeClick(event) {
+    // Find the toggler span that was clicked, if any
     const toggler = event.target.closest('.toggler');
-    if (toggler && toggler.parentElement.closest('.tree-node.folder')) {
+
+    // Proceed only if a toggler was clicked AND it's within a folder node
+    if (toggler && toggler.closest('.tree-node.folder')) {
         const nodeLi = toggler.closest('.tree-node.folder');
         const childrenUl = nodeLi.querySelector('.tree-node-children');
 
@@ -663,8 +685,16 @@ function handleTreeClick(event) {
              console.log(`[Popup] Toggler clicked for: ${nodeLi.dataset.path}`);
             const isCollapsed = nodeLi.classList.toggle('collapsed');
             toggler.textContent = isCollapsed ? '\u25B6' : '\u25BC'; // ▶ : ▼ (Unicode escapes)
+
+            // *** ADDED: Stop propagation ***
+            // Prevent this click from bubbling up to the label, which could
+            // trigger the checkbox 'change' event inappropriately via the label's 'for'.
+            event.stopPropagation();
+            console.log(`[Popup] Stopped event propagation for toggler click on ${nodeLi.dataset.path}`);
         }
     }
+    // If the click was not on a toggler (e.g., elsewhere on the label or node),
+    // let the event proceed normally (e.g., to toggle the checkbox via the label's 'for' attribute, which triggers the 'change' event handled by handleCheckboxChange).
 }
 
 
@@ -711,7 +741,8 @@ async function handleCopyClick() {
     disableControls();
     refreshButton.disabled = false; // Keep refresh active
     const originalButtonHTML = copyButton.innerHTML;
-    copyButton.innerHTML = `<span class="icon"></span> Copying...`; // Update icon using HTML entity in JS temporarily
+    // MODIFIED: Use the same refresh icon entity (↻) for the "Copying..." state
+    copyButton.innerHTML = `<span class="icon">↻</span> Copying...`;
     clearMessages();
     showStatus("Preparing context...");
 
@@ -753,6 +784,7 @@ async function handleCopyClick() {
     showStatus(`Fetching content for ${totalToFetch} files... (0/${totalToFetch})`);
 
     try {
+        // Sort files alphabetically by path before fetching and formatting
         selectedFilesToFetch.sort((a, b) => a.path.localeCompare(b.path));
 
         const contentPromises = selectedFilesToFetch.map(file =>
@@ -773,6 +805,7 @@ async function handleCopyClick() {
                      if (filesProcessed % 5 === 0 || filesProcessed === totalToFetch) {
                         showStatus(`Fetching file contents... (${filesProcessed}/${totalToFetch})`);
                     }
+                    // Return an object indicating error, useful for Promise.all
                     return { path: file.path, error: error.message || "Unknown error" };
                 })
         );
@@ -783,67 +816,85 @@ async function handleCopyClick() {
 
         showStatus("Formatting context...");
 
+        // Build the final context string
+        formattedContext = contextPrefix; // Start with the prefix
         results.forEach(result => {
             if (result.content !== undefined) {
+                // Sanitize null bytes which can cause issues with clipboard/display
                 const sanitizedContent = result.content.replace(/\0/g, '');
                 formattedContext += `// file path: ${result.path}\n`;
                 formattedContext += `${sanitizedContent}\n\n`;
             } else {
                  console.warn(`[Popup] Skipping file in final output due to fetch error: ${result.path}`);
+                 // Optionally add a note about the failed file in the context?
+                 // formattedContext += `// ERROR: Failed to fetch content for file path: ${result.path}\n// Error: ${result.error}\n\n`;
             }
         });
 
+        // Remove trailing whitespace/newlines from the final string
         formattedContext = formattedContext.trimEnd();
 
         const filesCopied = totalToFetch - fetchErrors;
         let finalMessage;
         let messageIsWarning = false;
 
+        // Determine the final status message
         if (filesCopied > 0) {
             finalMessage = `Context for ${filesCopied} file(s) copied!`;
             if (fetchErrors > 0) {
                 finalMessage += ` (${fetchErrors} failed)`;
-                messageIsWarning = true;
+                messageIsWarning = true; // Indicate partial success as a warning
             }
         } else if (fetchErrors > 0) {
-            finalMessage = `Copy failed: Could not retrieve content for any of the ${fetchErrors} selected files.`;
-            messageIsWarning = true;
+            finalMessage = `Copy failed: Could not retrieve content for any of the ${fetchErrors} selected file(s).`;
+            messageIsWarning = true; // Treat total failure as an error/warning
         } else {
+             // This case should ideally not happen if selectedFilesToFetch > 0
             finalMessage = "Copy failed: No content generated.";
             messageIsWarning = true;
         }
 
-        // Only attempt copy if there's something to copy (prefix or formatted content)
-        const fullContextToCopy = contextPrefix + formattedContext;
-        if (fullContextToCopy.trim()) { // Check if the combined string is not empty/whitespace
-             await navigator.clipboard.writeText(fullContextToCopy);
-             console.log("[Popup] Formatted context with prefix copied to clipboard.");
-             showStatus(finalMessage, messageIsWarning); // Show success/partial success
+        // Only attempt to copy if there's actually something to copy
+        if (formattedContext.trim()) {
+             await navigator.clipboard.writeText(formattedContext);
+             console.log("[Popup] Formatted context copied to clipboard.");
+             showStatus(finalMessage, messageIsWarning); // Show success/partial success message
         } else {
-             // Logged errors earlier (prefix fetch or all file fetches failed)
-             console.log("[Popup] Nothing to copy to clipboard (prefix and content are empty).");
-             // Ensure error message reflects the situation
-             if (fetchErrors === totalToFetch && totalToFetch > 0) {
-                 showError(finalMessage); // All file fetches failed
-             } else if (!contextPrefix && selectedFilesToFetch.length === 0) {
+             // If formattedContext is empty (prefix fetch failed AND all file fetches failed or no files selected)
+             console.log("[Popup] Nothing to copy to clipboard (formatted context is empty).");
+             // Show an appropriate error message based on why it might be empty
+             if (!contextPrefix && selectedFilesToFetch.length === 0) {
                  showError("Copy failed: No prefix loaded and no files selected.");
+             } else if (fetchErrors === totalToFetch && totalToFetch > 0) {
+                 showError(finalMessage); // Show the "Could not retrieve content..." message
              } else {
                  showError("Copy failed: Nothing generated to copy."); // Generic fallback
              }
         }
 
-        // System notification
+        // System notification (check permission first)
         try {
-            const hasNotificationPermission = await chrome.permissions.contains({ permissions: ['notifications'] });
-            if(hasNotificationPermission) {
+            // Use Permissions API for checking if available, fallback to basic check
+            let hasPermission = false;
+            if (chrome.permissions?.contains) {
+                hasPermission = await chrome.permissions.contains({ permissions: ['notifications'] });
+            } else {
+                 // Fallback check (might not be reliable in all contexts)
+                 console.warn("[Popup] chrome.permissions.contains API not available, attempting basic check.");
+                 // Basic check - assume granted if API exists, but this isn't robust.
+                 // Ideally, prompt for permission if needed, but that's more complex.
+                 hasPermission = !!chrome.notifications;
+            }
+
+            if(hasPermission) {
                  chrome.notifications.create({
                      type: 'basic',
-                     iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                     iconUrl: chrome.runtime.getURL('icons/icon48.png'), // Ensure icons are defined in manifest.json 'web_accessible_resources' if needed
                      title: 'GitHub AI Context Builder',
-                     message: finalMessage
+                     message: finalMessage // Use the same message shown in the popup
                  });
             } else {
-                console.log("[Popup] Notification permission not granted, skipping notification.");
+                console.log("[Popup] Notification permission not granted or check failed, skipping notification.");
             }
         } catch (notifyError) {
              console.warn("[Popup] Could not create notification:", notifyError);
@@ -856,13 +907,13 @@ async function handleCopyClick() {
         console.error(error.stack);
         showError(`Copy failed unexpectedly: ${error.message}`);
     } finally {
-        // Reset button HTML to original (which uses HTML entities now)
+        // Reset button HTML to original state
         copyButton.innerHTML = originalButtonHTML;
-        // Re-enable buttons based on current state
-        copyButton.disabled = totalSelectedFiles === 0;
+        // Re-enable buttons based on current state (e.g., if files are still selected)
+        copyButton.disabled = totalSelectedFiles === 0; // Re-evaluate based on potentially changed state
         expandAllButton.disabled = fileTreeData.length === 0;
         collapseAllButton.disabled = fileTreeData.length === 0;
-        refreshButton.disabled = false;
+        refreshButton.disabled = false; // Always re-enable refresh
     }
 }
 
@@ -870,18 +921,20 @@ async function handleCopyClick() {
 function handleRefreshClick() {
     console.log("[Popup] Refresh button clicked.");
     clearMessages();
-    fileTreeContainer.innerHTML = '';
+    fileTreeContainer.innerHTML = ''; // Clear the tree display immediately
     repoTitleElement.textContent = "Refreshing...";
-    disableControls();
+    disableControls(); // Disable controls while refreshing
 
+    // Reset internal state variables
     selectionState = {};
     fileTreeData = [];
     treeHierarchy = {};
     totalSelectedFiles = 0;
     totalSelectedSize = 0;
     isTruncated = false;
-    updateSelectionInfo();
+    updateSelectionInfo(); // Update UI to reflect reset state
 
+    // Re-initialize the popup, which will fetch fresh data
     initializePopup();
 }
 
@@ -891,9 +944,10 @@ function handleExpandAll() {
     const togglers = fileTreeContainer.querySelectorAll('.tree-node.folder .toggler');
     togglers.forEach(toggler => {
         const nodeLi = toggler.closest('.tree-node.folder');
+        // Check if it has children and is currently collapsed
         if (nodeLi && nodeLi.querySelector('.tree-node-children') && nodeLi.classList.contains('collapsed')) {
             nodeLi.classList.remove('collapsed');
-            toggler.textContent = '\u25BC'; // ▼ (Unicode escape)
+            toggler.textContent = '\u25BC'; // ▼ (Unicode escape) - Expanded state icon
         }
     });
 }
@@ -904,20 +958,24 @@ function handleCollapseAll() {
      const togglers = fileTreeContainer.querySelectorAll('.tree-node.folder .toggler');
      togglers.forEach(toggler => {
         const nodeLi = toggler.closest('.tree-node.folder');
+        // Check if it has children and is not currently collapsed
         if (nodeLi && nodeLi.querySelector('.tree-node-children') && !nodeLi.classList.contains('collapsed')) {
             nodeLi.classList.add('collapsed');
-            toggler.textContent = '\u25B6'; // ▶ (Unicode escape)
+            toggler.textContent = '\u25B6'; // ▶ (Unicode escape) - Collapsed state icon
         }
     });
 }
 
 
 // --- Attach Event Listeners ---
+// Use DOMContentLoaded to ensure the DOM is ready before trying to initialize
 document.addEventListener('DOMContentLoaded', initializePopup);
+// Attach listeners for buttons
 copyButton.addEventListener('click', handleCopyClick);
 refreshButton.addEventListener('click', handleRefreshClick);
 expandAllButton.addEventListener('click', handleExpandAll);
 collapseAllButton.addEventListener('click', handleCollapseAll);
-// Tree listeners are attached dynamically after render in addTreeEventListeners()
+// Tree listeners (for checkboxes and togglers) are attached dynamically
+// after the tree is rendered by calling addTreeEventListeners() within renderFileTree().
 
-console.log("[Popup] Script loaded and ready.");
+console.log("[Popup] Script loaded and essential listeners attached.");
