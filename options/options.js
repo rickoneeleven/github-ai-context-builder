@@ -1,161 +1,90 @@
-console.log("[Storage] Storage module loading...");
+// file path: options/options.js
+console.log("[Options] options.js script starting...");
+
+// Import the necessary storage functions from the common module
+import { getGitHubPat, setGitHubPat } from '../common/storage.js';
+
+// Get references to the DOM elements
+const patInput = document.getElementById('pat');
+const saveButton = document.getElementById('save');
+const statusElement = document.getElementById('status');
 
 /**
- * Retrieves the GitHub PAT from local storage.
- * @returns {Promise<string | null>} Resolves with the PAT string or null if not set or error.
+ * Displays a status message to the user and clears it after a delay.
+ * @param {string} message The message to display.
+ * @param {boolean} [isError=false] If true, applies error styling.
  */
-async function getGitHubPat() {
-    console.log("[Storage] Attempting to get GitHub PAT.");
+function showStatus(message, isError = false) {
+    console.log(`[Options Status] ${isError ? 'Error: ' : ''}${message}`);
+    statusElement.textContent = message;
+    // Apply CSS classes for styling based on success/error
+    statusElement.className = isError ? 'status-error' : 'status-success';
+
+    // Clear the message after 3 seconds
+    setTimeout(() => {
+        statusElement.textContent = '';
+        statusElement.className = ''; // Clear class as well
+    }, 3000);
+}
+
+/**
+ * Handles the click event for the Save button.
+ * Reads the PAT from the input, attempts to save it using setGitHubPat,
+ * and displays feedback to the user.
+ */
+async function handleSaveClick() {
+    const patValue = patInput.value.trim(); // Get trimmed value from input
+    console.log("[Options] Save button clicked. Attempting to save PAT.");
+
+    // Provide immediate feedback
+    statusElement.textContent = 'Saving...';
+    statusElement.className = ''; // Reset styling
+
     try {
-        const result = await chrome.storage.local.get('githubPat');
-        // Check for runtime errors after the promise resolves
-        if (chrome.runtime.lastError) {
-            console.error("[Storage] Error getting GitHub PAT:", chrome.runtime.lastError.message);
-            return null; // Return null on error
-        }
-        const pat = result.githubPat;
-        if (pat) {
-            console.log("[Storage] GitHub PAT retrieved successfully.");
-            return pat;
+        const success = await setGitHubPat(patValue);
+        if (success) {
+            console.log("[Options] PAT saved successfully via setGitHubPat.");
+            showStatus('Token saved successfully!', false);
         } else {
-            console.log("[Storage] No GitHub PAT found in storage.");
-            return null;
+            // setGitHubPat should log specific errors, but we show a generic UI error
+            console.error("[Options] Failed to save PAT (setGitHubPat returned false).");
+            showStatus('Failed to save token. Check background script console for details.', true);
         }
     } catch (error) {
-        console.error("[Storage] Exception while getting GitHub PAT:", error);
-        return null; // Return null on exception
+        // Catch any unexpected errors during the async operation
+        console.error("[Options] Exception while trying to save PAT:", error);
+        showStatus(`Error saving token: ${error.message}`, true);
     }
 }
 
 /**
- * Saves the GitHub PAT to local storage.
- * @param {string} pat The GitHub PAT string to save. An empty string clears the PAT.
- * @returns {Promise<boolean>} Resolves with true if successful, false otherwise.
+ * Loads the currently stored PAT (if any) when the options page is opened
+ * and populates the input field.
  */
-async function setGitHubPat(pat) {
-    console.log("[Storage] Attempting to set GitHub PAT.");
-    if (typeof pat !== 'string') {
-        console.error("[Storage] Invalid PAT type provided:", typeof pat);
-        return false;
-    }
+async function loadExistingPat() {
+    console.log("[Options] Options page loaded. Attempting to load existing PAT.");
     try {
-        await chrome.storage.local.set({ githubPat: pat });
-        // Check for runtime errors after the promise resolves
-        if (chrome.runtime.lastError) {
-            console.error("[Storage] Error setting GitHub PAT:", chrome.runtime.lastError.message);
-            return false;
-        }
-        console.log("[Storage] GitHub PAT set successfully.");
-        return true;
-    } catch (error) {
-        console.error("[Storage] Exception while setting GitHub PAT:", error);
-        return false;
-    }
-}
-
-/**
- * Creates a unique storage key for a repository's selection state based on its URL.
- * Strips protocol, trailing slashes, and fragments/query params for consistency.
- * @param {string} repoUrl The full URL of the GitHub repository page.
- * @returns {string | null} A consistent key for storage, or null if URL is invalid.
- */
-function getRepoStorageKey(repoUrl) {
-    try {
-        const url = new URL(repoUrl);
-        if (url.hostname !== 'github.com') {
-            console.warn("[Storage] Non-GitHub URL provided for key generation:", repoUrl);
-            // Allow it for now, maybe useful for GH Enterprise? Revisit if needed.
-            // return null;
-        }
-        // Normalize: lowercase hostname, remove leading/trailing slashes from pathname
-        const path = url.pathname.replace(/^\/|\/$/g, '');
-        const key = `selectionState_${url.hostname}_${path}`;
-        console.log(`[Storage] Generated storage key for ${repoUrl}: ${key}`);
-        return key;
-    } catch (error) {
-        console.error("[Storage] Invalid URL provided for key generation:", repoUrl, error);
-        return null;
-    }
-}
-
-/**
- * Retrieves the saved selection state for a given repository URL.
- * @param {string} repoUrl The URL of the repository.
- * @returns {Promise<object | null>} Resolves with the selection state object or null if not found or error.
- */
-async function getRepoSelectionState(repoUrl) {
-    const storageKey = getRepoStorageKey(repoUrl);
-    if (!storageKey) {
-        return null; // Error handled in getRepoStorageKey
-    }
-    console.log(`[Storage] Attempting to get selection state for key: ${storageKey}`);
-    try {
-        const result = await chrome.storage.local.get(storageKey);
-        if (chrome.runtime.lastError) {
-            console.error(`[Storage] Error getting selection state for key ${storageKey}:`, chrome.runtime.lastError.message);
-            return null;
-        }
-        const state = result[storageKey];
-        if (state && typeof state === 'object') {
-            console.log(`[Storage] Selection state retrieved successfully for key: ${storageKey}`);
-            return state;
+        const currentPat = await getGitHubPat();
+        if (currentPat) {
+            patInput.value = currentPat;
+            console.log("[Options] Existing PAT loaded into input field.");
         } else {
-            console.log(`[Storage] No selection state found for key: ${storageKey}`);
-            return null;
+            console.log("[Options] No existing PAT found in storage.");
+            patInput.value = ''; // Ensure field is empty if no PAT stored
         }
     } catch (error) {
-        console.error(`[Storage] Exception while getting selection state for key ${storageKey}:`, error);
-        return null;
+        console.error("[Options] Error loading existing PAT:", error);
+        showStatus(`Error loading saved token: ${error.message}`, true);
+        patInput.value = ''; // Ensure field is empty on error
     }
 }
 
-/**
- * Saves the selection state for a given repository URL.
- * @param {string} repoUrl The URL of the repository.
- * @param {object} selectionState The selection state object to save (e.g., { 'path/to/file.js': true, 'path/to/folder/': false }).
- * @returns {Promise<boolean>} Resolves with true if successful, false otherwise.
- */
-async function setRepoSelectionState(repoUrl, selectionState) {
-    const storageKey = getRepoStorageKey(repoUrl);
-    if (!storageKey) {
-        return false; // Error handled in getRepoStorageKey
-    }
-    if (typeof selectionState !== 'object' || selectionState === null) {
-        console.error("[Storage] Invalid selection state provided:", selectionState);
-        return false;
-    }
-    console.log(`[Storage] Attempting to set selection state for key: ${storageKey}`);
-    try {
-        await chrome.storage.local.set({ [storageKey]: selectionState });
-        if (chrome.runtime.lastError) {
-            console.error(`[Storage] Error setting selection state for key ${storageKey}:`, chrome.runtime.lastError.message);
-            return false;
-        }
-        console.log(`[Storage] Selection state set successfully for key: ${storageKey}`);
-        return true;
-    } catch (error) {
-        console.error(`[Storage] Exception while setting selection state for key ${storageKey}:`, error);
-        return false;
-    }
-}
+// --- Attach Event Listeners ---
 
+// Add listener to the Save button
+saveButton.addEventListener('click', handleSaveClick);
 
-// Note: To use these functions in other scripts (like options.js or popup.js),
-// you'll need to make sure this script is loaded correctly.
-// In Manifest V3, direct import/export isn't straightforward between all script types.
-// For popup/options -> common, use `<script type="module">` and `import`.
-// For service worker (if we add one later) -> common, use `importScripts()`.
-// For content script -> common, bundling or careful script injection is needed.
-// We'll manage this as we build the importing scripts.
+// Add listener to load the PAT when the page finishes loading
+document.addEventListener('DOMContentLoaded', loadExistingPat);
 
-console.log("[Storage] Storage module loaded.");
-
-// Since this isn't a module exporting directly for simple script tags,
-// we might attach functions to a global object or handle imports in the consuming scripts.
-// For now, assuming module usage in popup/options.
-export {
-    getGitHubPat,
-    setGitHubPat,
-    getRepoSelectionState,
-    setRepoSelectionState
-};
+console.log("[Options] options.js script loaded and listeners attached.");
