@@ -1,3 +1,5 @@
+/* File: popup/popup.css */
+
 /* Basic reset and body styling */
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -163,36 +165,69 @@ button .icon {
     font-style: italic;
 }
 
-/* Styles for the dynamically generated tree (placeholders) */
+/* --- Tree Node Styling --- */
+
+/* Style for the root UL generated in JS */
+.tree-root {
+    padding-left: 0;
+    margin: 0; /* Remove default UL margin */
+    list-style: none;
+}
+
+/* Style for each LI representing a file or folder */
 .tree-node {
-    margin-left: 20px; /* Indentation */
-    padding: 3px 0;
+    /* REMOVED: display: flex; */
+    /* This LI should stack its children (content row and children UL) vertically */
+    list-style: none; /* Ensure no list bullets */
+    padding: 0; /* Control padding via children */
+    margin: 0; /* Control margin via children */
+}
+
+/* Style for the DIV containing the checkbox, toggler, icon, name, meta */
+.tree-node-content {
     display: flex;
     align-items: center;
+    padding: 3px 0; /* Vertical spacing for the row */
+    cursor: default; /* Default cursor for the row, label/toggler override */
 }
 
-.tree-node label {
-    display: flex; /* Use flexbox for label content */
-    align-items: center;
-    cursor: pointer;
-    flex-grow: 1; /* Allow label to take space */
-    overflow: hidden; /* Prevent long names breaking layout */
-}
-
-.tree-node input[type="checkbox"] {
+/* Checkbox within the content row */
+.tree-node-content input[type="checkbox"] {
     margin-right: 6px;
-    flex-shrink: 0; /* Prevent checkbox shrinking */
-}
-
-.node-icon {
-    margin-right: 4px;
-    width: 16px; /* Ensure consistent spacing */
-    height: 16px;
-    display: inline-block;
-    vertical-align: middle;
     flex-shrink: 0;
 }
 
+/* Toggler span (expand/collapse icon) */
+.toggler {
+    margin-right: 4px;
+    cursor: pointer;
+    display: inline-block; /* Or flex item if needed */
+    width: 1em; /* Reserve space */
+    text-align: center;
+    flex-shrink: 0;
+    user-select: none; /* Prevent text selection on toggle click */
+}
+
+/* Label containing icon, name, meta */
+.tree-node-content label {
+    display: flex; /* Align icon, name, meta horizontally */
+    align-items: center;
+    cursor: pointer;
+    flex-grow: 1; /* Allow label to take available space */
+    overflow: hidden; /* Prevent long names breaking layout */
+}
+
+/* Icon (folder/file) */
+.node-icon {
+    margin-right: 4px;
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+    vertical-align: middle; /* Good fallback if flex alignment fails */
+    flex-shrink: 0;
+}
+
+/* File/Folder Name */
 .node-name {
     white-space: nowrap;
     overflow: hidden;
@@ -200,32 +235,29 @@ button .icon {
     margin-right: 5px; /* Space before metadata */
 }
 
+/* Metadata (file size) */
 .node-meta {
     font-size: 0.9em;
     color: #586069;
     margin-left: auto; /* Push metadata to the right */
     padding-left: 10px; /* Space between name and meta */
-    flex-shrink: 0; /* Prevent shrinking */
-}
-
-.collapsed > .tree-node-children {
-    display: none;
-}
-
-.folder > .tree-node > label {
-    font-weight: 500; /* Slightly bolder folders */
-}
-
-/* Basic expand/collapse toggle - actual icons added via JS */
-.toggler {
-    margin-right: 4px;
-    cursor: pointer;
-    display: inline-block;
-    width: 1em; /* Reserve space */
-    text-align: center;
     flex-shrink: 0;
 }
 
+/* Style for the UL containing child nodes */
+.tree-node-children {
+    list-style: none;
+    padding-left: 0; /* Remove default UL padding */
+    margin-left: 25px; /* <<< Indentation for children - Adjusted from 20px inline style */
+                         /* Value can be tweaked for desired visual depth */
+}
+
+/* Hide children UL when parent LI has 'collapsed' class */
 .collapsed > .tree-node-children {
     display: none;
+}
+
+/* Specific styling for folder nodes */
+.folder > .tree-node-content > label {
+    font-weight: 500; /* Slightly bolder folders */
 }
