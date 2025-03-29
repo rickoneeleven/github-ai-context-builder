@@ -14,10 +14,10 @@ function parseRepoUrl(repoUrl) {
     console.log(`[GitHub API] Parsing URL: ${repoUrl}`);
     try {
         const url = new URL(repoUrl);
-        if (url.hostname !== 'github.com') {
-            console.warn("[GitHub API] URL is not a standard github.com URL:", repoUrl);
-            // Allow for potential GitHub Enterprise, but might need adjustments later.
-        }
+        // Allowing non-github.com hostnames for potential enterprise use
+        // if (url.hostname !== 'github.com') {
+        //     console.warn("[GitHub API] URL is not a standard github.com URL:", repoUrl);
+        // }
         const pathParts = url.pathname.split('/').filter(part => part.length > 0); // Filter empty parts
 
         if (pathParts.length >= 2) {
@@ -40,20 +40,20 @@ function parseRepoUrl(repoUrl) {
  * Makes an authenticated request to the GitHub API.
  * Handles fetching the PAT and adding the Authorization header.
  * @param {string} url - The full API endpoint URL.
- * @param {object} options - Optional fetch options (method, headers, body, etc.).
+ * @param {object} [options={}] - Optional fetch options (method, headers, body, etc.).
  * @returns {Promise<Response>} - The raw fetch Response object.
  * @throws {Error} If the request fails or returns an error status code.
  */
 async function makeApiRequest(url, options = {}) {
     console.log(`[GitHub API] Making request to: ${url}`);
-    let headers = { ...options.headers, 'Accept': 'application/vnd.github.v3+json' };
+    const headers = { ...options.headers, 'Accept': 'application/vnd.github.v3+json', 'X-GitHub-Api-Version': '2022-11-28' }; // Added API version header - recommended practice
     let response;
 
     try {
         const pat = await getGitHubPat();
         if (pat) {
             console.log("[GitHub API] Using PAT for authentication.");
-            headers['Authorization'] = `token ${pat}`;
+            headers['Authorization'] = `Bearer ${pat}`; // Changed from 'token' to 'Bearer' (both work, Bearer is more standard)
         } else {
             console.log("[GitHub API] No PAT found, making unauthenticated request.");
         }
@@ -62,23 +62,28 @@ async function makeApiRequest(url, options = {}) {
 
         console.log(`[GitHub API] Request to ${url} completed with status: ${response.status}`);
 
-        // Check for common error statuses
+        // Check for error statuses
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response.' }));
-            const errorMessage = `GitHub API request failed: ${response.status} ${response.statusText}. URL: ${url}. Message: ${errorData.message || 'No message'}`;
-            console.error(`[GitHub API] Error Response:`, errorData);
+            let errorData;
+            let errorMessage = `GitHub API request failed: ${response.status} ${response.statusText}. URL: ${url}.`;
+            try {
+                errorData = await response.json();
+                errorMessage += ` Message: ${errorData.message || 'No specific message in error response.'}`;
+                console.error(`[GitHub API] Error Response Body:`, JSON.stringify(errorData, null, 2)); // Log the actual error body
+            } catch (parseError) {
+                errorMessage += ' Additionally, failed to parse error response body.';
+                console.error(`[GitHub API] Failed to parse error response body for status ${response.status}`);
+            }
             throw new Error(errorMessage);
-            // Note: We are not automatically prompting for PAT here like in the original background.js.
-            // The user needs to set it via the options page. Errors will be surfaced to the UI.
         }
 
         return response;
 
     } catch (error) {
-        // Catch fetch errors (network issues) or errors thrown from !response.ok
-        console.error(`[GitHub API] Fetch failed for ${url}:`, error);
-        // Re-throw the error to be handled by the caller
-        throw error;
+        // Catch fetch errors (network issues) or errors thrown from !response.ok or PAT retrieval
+        console.error(`[GitHub API] API request process failed for ${url}:`, error);
+        // Re-throw the error to be handled by the caller, potentially adding context if needed
+        throw new Error(`API request failed for ${url}. ${error.message}`);
     }
 }
 
@@ -96,70 +101,64 @@ async function getDefaultBranch(owner, repo) {
         const response = await makeApiRequest(url);
         const repoInfo = await response.json();
         if (!repoInfo.default_branch) {
+            console.error("[GitHub API] Default branch property missing in repo info:", repoInfo);
             throw new Error("Could not determine default branch from repository info.");
         }
         console.log(`[GitHub API] Default branch for ${owner}/${repo}: ${repoInfo.default_branch}`);
         return repoInfo.default_branch;
     } catch (error) {
         console.error(`[GitHub API] Error fetching default branch for ${owner}/${repo}:`, error);
-        throw new Error(`Failed to get default branch for ${owner}/${repo}. ${error.message}`);
+        // Propagate a more specific error
+        throw new Error(`Failed to get default branch for ${owner}/${repo}. Cause: ${error.message}`);
     }
 }
 
 
 /**
  * Fetches the file tree for a repository recursively.
+ * Returns both the tree data and a flag indicating if it was truncated.
  * @param {string} owner - The repository owner.
  * @param {string} repo - The repository name.
- * @returns {Promise<Array<object>>} - A promise that resolves to the array of tree items (files and blobs).
- * @throws {Error} If the request fails or the tree is truncated unexpectedly.
+ * @returns {Promise<{tree: Array<object>, truncated: boolean}>} - A promise resolving to an object containing the tree items and truncation status.
+ * @throws {Error} If the request fails or the tree data is invalid.
  */
 async function getRepoTree(owner, repo) {
     console.log(`[GitHub API] Fetching repository tree for ${owner}/${repo}`);
     try {
         const defaultBranch = await getDefaultBranch(owner, repo);
-        // Use the default branch SHA for potentially more stable results, but requires an extra call.
-        // Or just use the branch name directly (simpler). Let's use the name for now.
-        // const branchInfoUrl = `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/branches/${defaultBranch}`;
-        // const branchResponse = await makeApiRequest(branchInfoUrl);
-        // const branchData = await branchResponse.json();
-        // const treeSha = branchData.commit.sha;
-
         const treeUrl = `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/trees/${defaultBranch}?recursive=1`;
         console.log(`[GitHub API] Fetching tree using URL: ${treeUrl}`);
 
         const response = await makeApiRequest(treeUrl);
         const treeData = await response.json();
 
-        if (treeData.truncated) {
-            // This is a limitation. For very large repos, we might not get all files.
-            // We should inform the user if this happens.
+        // Explicitly check for the tree array before accessing truncated flag
+        if (!treeData || !Array.isArray(treeData.tree)) {
+            console.error("[GitHub API] Invalid tree data structure received:", treeData);
+            throw new Error("Invalid tree data received from GitHub API (missing 'tree' array).");
+        }
+
+        const isTruncated = !!treeData.truncated; // Ensure boolean
+
+        if (isTruncated) {
             console.warn(`[GitHub API] Warning: Repository tree for ${owner}/${repo} was truncated. Not all files may be listed.`);
-            // Decide how to handle this - throw error, or return partial tree with warning?
-            // For now, let's return the partial tree, but the UI should ideally indicate this.
-            // throw new Error(`Repository tree is too large and was truncated by the GitHub API.`);
+            // Note: We are now returning the truncation status explicitly.
         }
 
-        if (!treeData.tree || !Array.isArray(treeData.tree)) {
-             throw new Error("Invalid tree data received from GitHub API.");
-        }
-
-        console.log(`[GitHub API] Successfully fetched tree with ${treeData.tree.length} items for ${owner}/${repo}. Truncated: ${treeData.truncated}`);
-        // We only care about files ('blob') for content fetching. Folders ('tree') help structure.
-        // Filter here or in the caller? Let's return the full tree for now, caller can filter.
-        // Example item: { path: 'src/main.js', mode: '100644', type: 'blob', sha: '...', size: 1234, url: '...' }
-        return treeData.tree;
+        console.log(`[GitHub API] Successfully fetched tree with ${treeData.tree.length} items for ${owner}/${repo}. Truncated: ${isTruncated}`);
+        return { tree: treeData.tree, truncated: isTruncated }; // Return object structure
 
     } catch (error) {
         console.error(`[GitHub API] Error fetching repository tree for ${owner}/${repo}:`, error);
         // Re-throw a more specific error message
-        throw new Error(`Failed to fetch repository tree for ${owner}/${repo}. ${error.message}`);
+        throw new Error(`Failed to fetch repository tree for ${owner}/${repo}. Cause: ${error.message}`);
     }
 }
 
 
 /**
  * Fetches the content of a specific file (blob) using its SHA.
+ * Handles potentially empty files correctly.
  * @param {string} owner - The repository owner.
  * @param {string} repo - The repository name.
  * @param {string} fileSha - The SHA hash of the file blob.
@@ -174,28 +173,34 @@ async function getFileContentBySha(owner, repo, fileSha) {
         const response = await makeApiRequest(url);
         const blobData = await response.json();
 
-        if (!blobData.content || blobData.encoding !== 'base64') {
-            console.error("[GitHub API] Invalid blob data received:", blobData);
-            throw new Error(`Invalid or missing content for blob SHA ${fileSha}. Encoding was ${blobData.encoding}.`);
+        // *** MODIFIED CHECK ***
+        // Check if content is explicitly null/undefined OR if encoding is not base64.
+        // Allows content to be an empty string "" (which is valid for empty files).
+        if (blobData.content == null || blobData.encoding !== 'base64') {
+            // Log the actual received data for better debugging
+            console.error(`[GitHub API] Invalid or incompatible blob data received for SHA ${fileSha}:`, JSON.stringify(blobData, null, 2));
+            throw new Error(`Invalid, missing, or non-base64 content for blob SHA ${fileSha}. Received encoding: ${blobData.encoding}. Content present: ${blobData.content != null}.`);
         }
 
-        // Decode Base64 content
+        // Decode Base64 content. atob('') returns '', which is correct for empty files.
         const decodedContent = atob(blobData.content);
-        console.log(`[GitHub API] Successfully fetched and decoded content for SHA: ${fileSha}`);
+        console.log(`[GitHub API] Successfully fetched and decoded content for SHA: ${fileSha} (Length: ${decodedContent.length})`);
         return decodedContent;
 
     } catch (error) {
-        console.error(`[GitHub API] Error fetching file content for SHA ${fileSha}:`, error);
-        throw new Error(`Failed to get file content for SHA ${fileSha}. ${error.message}`);
+        // Log the specific error during blob fetching/decoding
+        console.error(`[GitHub API] Error processing file content for SHA ${fileSha}:`, error);
+        // Throw a new error with context
+        throw new Error(`Failed to get or decode file content for SHA ${fileSha}. Cause: ${error.message}`);
     }
 }
 
-// Export the functions needed by other modules (likely popup.js)
+// Export the functions needed by other modules
 export {
     parseRepoUrl,
     getRepoTree,
     getFileContentBySha
-    // We don't export getDefaultBranch or makeApiRequest directly, they are internal helpers.
+    // Internal helpers like makeApiRequest and getDefaultBranch are not exported.
 };
 
 console.log("[GitHub API] Module loaded.");
