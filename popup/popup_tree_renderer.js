@@ -11,6 +11,7 @@ const FILE_ICON = '\u{1F4C4}'; // 📄
 
 // --- Private Helper Functions ---
 
+// buildTreeHierarchy function remains the same...
 /**
  * Builds the hierarchical tree structure from the flat API data.
  * This version is intended to be internal to the renderer module.
@@ -20,14 +21,25 @@ const FILE_ICON = '\u{1F4C4}'; // 📄
 function buildTreeHierarchy(items) {
     const tree = {};
     // Sort items alphabetically by path for consistent order before building
-    items.sort((a, b) => a.path.localeCompare(b.path));
+    // Ensure sorting handles potential null/undefined paths defensively
+    items.sort((a, b) => (a?.path ?? '').localeCompare(b?.path ?? ''));
 
     for (const item of items) {
+         // Added safety checks for item and path
+         if (!item || typeof item.path !== 'string') {
+            log('warn', '[Tree Renderer] Skipping item in hierarchy build due to invalid data:', item);
+            continue;
+        }
         const parts = item.path.split('/');
         let currentLevel = tree;
 
         for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
+            if (!part && parts.length > 1) { // Avoid issues with paths starting/ending with / or having //
+                 log('warn', `[Tree Renderer] Skipping potentially empty path segment in '${item.path}' at index ${i}`);
+                 continue;
+            }
+
             const isLastPart = i === parts.length - 1;
             const currentPathSegment = parts.slice(0, i + 1).join('/');
 
@@ -65,13 +77,22 @@ function buildTreeHierarchy(items) {
             if (currentLevel[part] && currentLevel[part].__children) {
                 currentLevel = currentLevel[part].__children;
             } else if (!isLastPart) {
-                log('error', `[Tree Renderer] Tree building error: Expected folder at '${part}' for path '${item.path}'. Node:`, currentLevel[part]);
-                break; // Stop processing this problematic path
+                log('error', `[Tree Renderer] Tree building error: Expected folder structure at '${part}' for path '${item.path}'. Node:`, currentLevel[part]);
+                 // Attempt recovery: create children object if possible
+                 if (currentLevel[part]) {
+                     currentLevel[part].__children = {};
+                     currentLevel = currentLevel[part].__children;
+                 } else {
+                    // Cannot recover, stop processing this path
+                    log('error', `[Tree Renderer] Cannot recover tree structure for path '${item.path}'. Stopping processing for this item.`);
+                    break;
+                 }
             }
         }
     }
     return tree;
 }
+
 
 /**
  * Recursively creates HTML elements for the file tree nodes.
@@ -79,8 +100,9 @@ function buildTreeHierarchy(items) {
  * @param {HTMLElement} parentElement - The parent UL element to append to.
  * @param {object} selectionState - The current selection state map { [pathKey]: boolean }.
  * @param {Function} updateFolderCheckboxStateCallback - Callback to determine initial folder state.
+ * @param {object} folderSizes - NEW: Map of { folderPathKey: size }.
  */
-function createTreeNodesRecursive(node, parentElement, selectionState, updateFolderCheckboxStateCallback) {
+function createTreeNodesRecursive(node, parentElement, selectionState, updateFolderCheckboxStateCallback, folderSizes) { // ADDED folderSizes
     // Sort keys: folders first, then files, alphabetically within type
     const keys = Object.keys(node).sort((a, b) => {
         const nodeA = node[a];
@@ -98,6 +120,12 @@ function createTreeNodesRecursive(node, parentElement, selectionState, updateFol
              continue;
         }
         const itemData = itemNode.__data;
+        // Added safety checks
+         if (!itemData.path || !itemData.type) {
+             log('warn', `[Tree Renderer] Skipping node render, itemData missing path or type for key: ${key}`, itemData);
+             continue;
+         }
+
         const isFolder = itemData.type === 'tree';
         const nodeKey = getItemPathKey(itemData); // Use util helper
 
@@ -109,7 +137,6 @@ function createTreeNodesRecursive(node, parentElement, selectionState, updateFol
         // --- Create Content Row (DIV) ---
         const nodeContentRow = document.createElement('div');
         nodeContentRow.className = 'tree-node-content';
-        // Removed inline styles, assuming they are in popup.css
 
         // --- Checkbox ---
         const checkbox = document.createElement('input');
@@ -120,7 +147,6 @@ function createTreeNodesRecursive(node, parentElement, selectionState, updateFol
         // Set initial checked state based on provided selectionState
         checkbox.checked = !!selectionState[nodeKey];
         checkbox.indeterminate = false; // Initial state, folder logic will update if needed
-        // Removed inline styles
 
         // --- Toggler (for folders) ---
         const toggler = document.createElement('span');
@@ -132,39 +158,43 @@ function createTreeNodesRecursive(node, parentElement, selectionState, updateFol
             toggler.title = "Expand/Collapse";
             li.classList.add('collapsed'); // Start collapsed if it has children
         } else {
-            // Non-interactive placeholder for alignment
-            toggler.innerHTML = ' '; // Use space for alignment
+            toggler.innerHTML = ' '; // Use non-breaking space for alignment
             toggler.style.cursor = 'default'; // Indicate non-interactive
-            // Ensure empty folders aren't visually marked as collapsible
-             if(isFolder) li.classList.remove('collapsed');
+            if(isFolder) li.classList.remove('collapsed');
         }
-        // Removed inline styles
 
         // --- Label (Container for icon, name, meta) ---
         const label = document.createElement('label');
         label.htmlFor = safeId; // Associate label with checkbox
-        // Removed inline styles
 
         // --- Icon ---
         const icon = document.createElement('span');
         icon.className = 'node-icon';
         icon.textContent = isFolder ? FOLDER_ICON : FILE_ICON;
-        // Removed inline styles
 
         // --- Name ---
         const nameSpan = document.createElement('span');
         nameSpan.className = 'node-name';
         nameSpan.textContent = key; // Display the base name (part)
         nameSpan.title = itemData.path; // Full path in tooltip
-        // Removed inline styles
 
         // --- Metadata (Size) ---
         const metaSpan = document.createElement('span');
         metaSpan.className = 'node-meta';
-        if (!isFolder && typeof itemData.size === 'number') { // Check type for safety
-            metaSpan.textContent = formatBytes(itemData.size);
+
+        // --- MODIFIED: Display size for files OR folders ---
+        let size = undefined;
+        if (isFolder) {
+            size = folderSizes[nodeKey]; // Look up folder size
+        } else { // Is File
+            size = itemData.size; // Get file size
         }
-        // Removed inline styles
+
+        if (typeof size === 'number') { // Check type for safety for both
+            metaSpan.textContent = formatBytes(size);
+            metaSpan.title = `${size.toLocaleString()} bytes`; // Add precise byte count to tooltip
+        }
+        // --- END MODIFICATION ---
 
         // --- Assemble Label ---
         label.appendChild(icon);
@@ -181,11 +211,6 @@ function createTreeNodesRecursive(node, parentElement, selectionState, updateFol
         parentElement.appendChild(li); // Add to parent UL
 
         // --- Determine Folder Checkbox State (Needs callback) ---
-        // This needs to happen *after* the element is created but *before* recursing,
-        // as children states depend on parent states sometimes.
-        // However, the *logic* of determining this (checking children) belongs in tree_logic.js.
-        // Renderer only sets the *initial* state based on the provided selectionState.
-        // We pass a callback to let the logic module finalize the state if needed *after* rendering.
         if (isFolder && typeof updateFolderCheckboxStateCallback === 'function') {
             updateFolderCheckboxStateCallback(checkbox, nodeKey);
         }
@@ -194,10 +219,9 @@ function createTreeNodesRecursive(node, parentElement, selectionState, updateFol
         if (hasChildren) {
             const childrenUl = document.createElement('ul');
             childrenUl.className = 'tree-node-children';
-            // Removed inline styles
             li.appendChild(childrenUl); // Append children UL to the current LI
-            // Pass selectionState and callback down
-            createTreeNodesRecursive(itemNode.__children, childrenUl, selectionState, updateFolderCheckboxStateCallback);
+            // Pass selectionState, callback, and folderSizes down
+            createTreeNodesRecursive(itemNode.__children, childrenUl, selectionState, updateFolderCheckboxStateCallback, folderSizes); // Pass folderSizes
         }
     }
 }
@@ -211,8 +235,9 @@ function createTreeNodesRecursive(node, parentElement, selectionState, updateFol
  * @param {Array<object>} fileTreeData - The flat list of file/folder items.
  * @param {object} selectionState - The current selection state { [pathKey]: boolean }.
  * @param {Function} updateFolderCheckboxStateCallback - Callback function from tree_logic to update folder states.
+ * @param {object} folderSizes - NEW: Map of calculated folder sizes { folderPathKey: size }.
  */
-function renderTreeDOM(fileTreeContainer, fileTreeData, selectionState, updateFolderCheckboxStateCallback) {
+function renderTreeDOM(fileTreeContainer, fileTreeData, selectionState, updateFolderCheckboxStateCallback, folderSizes) { // ADDED folderSizes
     log('info', "[Tree Renderer] Rendering file tree DOM...");
     if (!fileTreeContainer) {
         log('error', "[Tree Renderer] File tree container element not provided.");
@@ -233,6 +258,11 @@ function renderTreeDOM(fileTreeContainer, fileTreeData, selectionState, updateFo
           fileTreeContainer.innerHTML = '<div class="error">Error: Tree logic callback missing.</div>';
          return;
      }
+      if (typeof folderSizes !== 'object' || folderSizes === null) { // NEW check
+          log('error', "[Tree Renderer] Invalid folderSizes map provided.");
+           fileTreeContainer.innerHTML = '<div class="error">Error: Folder size data missing.</div>';
+          return;
+      }
 
 
     const startTime = performance.now();
@@ -243,10 +273,9 @@ function renderTreeDOM(fileTreeContainer, fileTreeData, selectionState, updateFo
 
         const rootElement = document.createElement('ul');
         rootElement.className = 'tree-root';
-        // Removed inline styles
 
-        // Start recursion from the root level
-        createTreeNodesRecursive(treeHierarchy, rootElement, selectionState, updateFolderCheckboxStateCallback);
+        // Start recursion from the root level, passing folderSizes
+        createTreeNodesRecursive(treeHierarchy, rootElement, selectionState, updateFolderCheckboxStateCallback, folderSizes); // Pass folderSizes
 
         fileTreeContainer.appendChild(rootElement);
         const endTime = performance.now();
@@ -254,8 +283,8 @@ function renderTreeDOM(fileTreeContainer, fileTreeData, selectionState, updateFo
 
     } catch (error) {
          log('error', "[Tree Renderer] Error during file tree DOM rendering:", error);
-         showError(`Failed to render file tree: ${error.message}`); // Use showError from ui module? Or pass callback? For now, log only.
-         fileTreeContainer.innerHTML = '<div class="error">Failed to display file tree. Check console.</div>';
+         // Avoid using ui.showError directly from renderer if possible, maintain separation
+         fileTreeContainer.innerHTML = `<div class="error">Failed to display file tree: ${error.message}. Check console.</div>`;
     }
 }
 
