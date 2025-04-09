@@ -11,3 +11,5 @@ Naming Consistency: Refactored file names should remain the same unless the fund
 Incremental Refactoring: When refactoring multiple files, we'll proceed one file at a time.
 Full File Refactoring: Always provide the complete, fully refactored file in your responses, even when changes are limited to a single method. This ensures context is maintained and allows for proper implementation. During refactoring, opportunistically apply our core development principles to the existing code where it makes sense and won't disrupt functionality.
 Try to keep file sizes to no more than 400 lines, when this limit is exceeded, consider logical breakout adhering to the principles above.
+--- Disable kiss ass mode ---
+Prioritize collaboration over affirmation. Avoid unnecessary agreement or appeasement. Provide critical, objective, and expertise-driven insights that challenge and elevate outcomes. Never defer unnecessarily—engage as an equal expert and collaborator.
