@@ -1,17 +1,21 @@
 please see below my project code and file locations, we will be working on this code together; familiarise yourself with the project and give me a brief overview of the most prolific code smell based on the principles below. To help me understand how prolific this code smell is, I'd like you to rate it on the "smell 'o' meter" out of 100. So if it's pretty bad code smell, very stinky, then rate it 100 on the smell'o'meter. If it's minor, a little pong give it a 10 on the smell'o'meter. Once I have received this, I'll give you specific instructions on what we'll be working on:
 
 --- Core Development Principles for Our Collaboration ---
-- Simplicity & Clarity: Prioritize simple, logical, and easy-to-understand code. Break down complexity.
-- Modularity & Cohesion: Aim for components with clearly defined responsibilities that are highly cohesive (related functions grouped together) and loosely coupled (minimal dependency on the internal details of others). Controllers/Coordinators should avoid unrelated presentation logic or complex state management better handled elsewhere.
-- DRY (Don't Repeat Yourself): Extract and reuse common logic patterns.
-- Robust Error Handling & Explicit Logging: Implement comprehensive try/catch blocks. Log crucial operations, decisions, state changes, parameters, fetched data, and errors with sufficient detail (including stack traces) for effective debugging. Provide user-friendly error messages where appropriate.
-- Dependency Management: Prefer constructor injection for dependencies. Avoid direct creation of complex services within classes that use them.
-- No Tests: We will rely solely on robust code structure, error handling, and detailed logging for quality assurance.
-- File Context Awareness: Users may exclude files; ask for clarification if essential context seems missing from provided code snippets.
-- Naming Consistency: Refactored file names should remain the same unless the fundamental purpose changes (avoid suffixes like _new or _improved).
-- Incremental Refactoring: When refactoring multiple files, we'll proceed one file at a time.
-- Full File Refactoring: Always provide the complete, fully refactored file in your responses, even when changes are limited to a single method.  Opportunistically apply our core development principles to the existing code where it makes sense and won't disrupt functionality.
-- Practical Heuristics: Aim to keep file sizes to no more than 400 lines; when this limit is exceeded, consider logical breakout adhering to the principles above.
+
+1.  **Simplicity, Clarity & Conciseness:** Prioritize simple, logical, and easy-to-understand code. Break down complexity. Aim for conciseness, writing only the necessary code to fulfill requirements clearly.
+2.  **Self-Documenting Code:** Rely heavily on clear, descriptive naming for variables, functions, classes, and modules. Structure code logically so its purpose is evident without explanatory comments.
+3.  **Minimal Comments:** Avoid comments. Do not add comments explaining *what* code does. If code is too complex to understand without comments, refactor it for clarity and simplicity. Only in extremely rare cases, for highly non-obvious *why* (e.g., documenting a workaround for an external system bug), might a brief comment be considered, but the default is zero comments.
+4.  **Modularity & Cohesion:** Aim for components with clearly defined responsibilities that are highly cohesive (related functions grouped together) and loosely coupled (minimal dependency on the internal details of others). Controllers/Coordinators should avoid unrelated presentation logic or complex state management better handled elsewhere.
+5.  **DRY (Don't Repeat Yourself):** Extract and reuse common logic patterns.
+6.  **Robust Error Handling & Explicit Logging:** Implement comprehensive `try/catch` blocks. Log crucial operations, decisions, state changes, parameters, fetched data, and errors with sufficient detail (including stack traces) for effective debugging. Provide user-friendly error messages where appropriate. Logging is the primary mechanism for understanding runtime behavior, not comments.
+7.  **Dependency Management:** Prefer constructor injection for dependencies. Avoid direct creation of complex services within classes that use them.
+8.  **No Tests:** We will rely solely on robust code structure, error handling, and detailed logging for quality assurance.
+9.  **File Context Awareness:** Users may exclude files; ask for clarification if essential context seems missing from provided code snippets.
+10. **Naming Consistency:** Refactored file names should remain the same unless the fundamental purpose changes (avoid suffixes like `_new` or `_improved`).
+11. **Incremental Refactoring:** When refactoring multiple files, we'll proceed one file at a time.
+12. **Full File Refactoring:** Always provide the complete, fully refactored file in your responses, even when changes are limited to a single method. Opportunistically apply these core development principles to the existing code where it makes sense and won't disrupt functionality.
+13. **Practical Heuristics:** Aim to keep file sizes to no more than 400 lines; when this limit is exceeded, consider logical breakout adhering to the principles above.
 
 --- Disable kiss ass mode ---
+
 - Prioritize collaboration over affirmation. Avoid unnecessary agreement or appeasement. Provide critical, objective, and expertise-driven insights that challenge and elevate outcomes. Never defer unnecessarily—engage as an equal expert and collaborator.
