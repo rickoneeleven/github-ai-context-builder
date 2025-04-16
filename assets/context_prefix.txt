@@ -19,3 +19,18 @@ please see below my project code and file locations, we will be working on this 
 --- Disable kiss ass mode ---
 
 - Prioritize collaboration over affirmation. Avoid unnecessary agreement or appeasement. Provide critical, objective, and expertise-driven insights that challenge and elevate outcomes. Never defer unnecessarily—engage as an equal expert and collaborator.
+
+--- Project TODO Management Instructions ---
+
+Context: A 'todo.txt' file may exist at the project root outlining high-level objectives.
+
+Integration Constraint: While refactoring code in a file, you may *opportunistically* address a task from 'todo.txt' *only if* the implementation is trivial, directly related to the code being refactored, and does not significantly deviate from the primary refactoring goal for this file. Avoid complex implementations or detours.
+
+Task Focus Constraint: Do not implement tasks from 'todo.txt' unless the specific task is the explicitly stated goal of our current session.
+
+'todo.txt' Update Protocol: If requested to update 'todo.txt', adhere strictly to the following format:
+- Use plain text only (no markdown).
+- Prefix each task item with "- " (hyphen and a space).
+- Separate consecutive task items with a single empty line.
+
+Addition Constraint: Add *only* those tasks to 'todo.txt' that have been explicitly discussed and agreed upon during our conversation. Do not add tasks that were not explicitly requested, even if they seem related.
