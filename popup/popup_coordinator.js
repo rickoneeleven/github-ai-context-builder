@@ -22,223 +22,190 @@ let repoModule = null; // Store reference to repo module instance
 
 /**
  * Initializes the application.
- * This is the main entry point called from popup.js.
  */
 async function initializeApp() {
     log('info', "[Popup Coordinator] Initializing application...");
     const startTime = performance.now();
 
-    // Initialize UI
+    // Initialize UI: Cache elements, set initial states
     cacheElements();
     ui.initUI();
     ui.clearMessages();
-    ui.updateRepoTitle('Loading...');
-    ui.setControlsDisabled();
-    ui.showStatus("Detecting GitHub repository...");
+    ui.setControlsDisabled(); // Disable controls initially
+    ui.showStatus("Detecting GitHub repository..."); // Initial status
 
     try {
-        // Initialize modules (Store repo module reference)
-        repoModule = repository.initRepository(); // Store the returned object
+        // Initialize repo module (returns getters/references)
+        repoModule = repository.initRepository();
 
-        // Detect repository from active tab
+        // Detect repository from active tab (updates UI for title/branch)
         const repoInfo = await repository.detectRepository();
-        if (!repoInfo) {
-            // Repository module handles UI for non-GitHub/non-repo pages via specific errors
-            // The error handling below will catch "not_github" or "not_repo"
-            log('info', "[Popup Coordinator] Repository detection incomplete or failed. Initialization may halt.");
-            // Return early if detection truly fails without specific error handled below
-            // This path might be taken if chrome.tabs.query fails initially.
-             if (!currentRepoUrl) { // Check if repo URL was ever set
-                 ui.showError("Could not determine current tab URL.");
-                 ui.setRefreshDisabled(false);
-                 ui.updatePerformanceStats("");
-                 return;
-             }
+        // If detectRepository throws specific errors (not_github, not_repo, no_tab_url),
+        // it handles UI updates and the error is caught below.
+        // If it returns null unexpectedly, we might still have issues.
+        if (!repoInfo && !repository.getRepoInfo().url) {
+            // This condition checks if detection failed AND no URL was ever set.
+            // Should be covered by specific errors now, but good safety check.
+            log('error', "[Popup Coordinator] Repository detection failed critically (no URL).");
+            // UI error likely already shown by detectRepository or its callers
+            ui.setRefreshDisabled(false);
+            ui.updatePerformanceStats("");
+            return; // Halt initialization
         }
 
-        // Fetch repository data (includes folder size calculation now)
+        // Fetch repository data (tree, sizes) using detected info
         const dataFetched = await repository.fetchRepositoryData();
         if (!dataFetched) {
             // Error message already shown by fetchRepositoryData
             log('error', "[Popup Coordinator] Repository data fetch failed. Aborting initialization.");
-            // Ensure refresh is enabled
-             ui.setRefreshDisabled(false);
-             ui.updatePerformanceStats(""); // Clear perf on error
+            ui.setRefreshDisabled(false); // Ensure refresh is enabled on fetch failure
+            ui.updatePerformanceStats("");
             return; // Stop initialization
         }
 
-        // Initialize state module with repository data reference
-        // Use the stored repoModule reference to access fileTreeData
+        // Initialize state management
+        // Pass the REPO URL confirmed after detection/fetch
+        const confirmedRepoUrl = repository.getRepoInfo().url;
+        if (!confirmedRepoUrl) {
+            log('error', "[Popup Coordinator] Cannot initialize state: Confirmed repository URL is missing after fetch.");
+            ui.showError("Initialization Error: Missing repository URL for state management.");
+            return; // Halt
+        }
+
         const stateModule = state.initState({
-            fileTreeDataRef: repoModule.fileTreeData, // Pass reference correctly
-            repoUrl: repository.getRepoInfo().url, // Get current URL after detection/fetch
+            fileTreeDataRef: repoModule.fileTreeData, // Reference to the actual data array
+            repoUrl: confirmedRepoUrl,
             onStateUpdateCallback: handleStateUpdate
         });
 
-        // Load persisted selection state
+        // Load persisted selection state (or default)
         const selectionState = await state.loadAndApplySelectionState();
 
-        // Initialize tree logic with state references
-        // Use the stored repoModule reference to access fileTreeData
+        // Initialize tree logic
         const treeLogicResult = treeLogic.initTreeLogic({
             container: fileTreeContainer,
-            initialSelectionState: selectionState, // Direct reference to loaded state
-            initialFileTreeData: repoModule.fileTreeData, // Pass reference correctly
-            saveStateCallback: state.saveSelectionState, // Pass save function
-            onStateUpdate: state.handleTreeStateUpdate // Pass update handler
+            initialSelectionState: selectionState,
+            initialFileTreeData: repoModule.fileTreeData,
+            saveStateCallback: state.saveSelectionState,
+            onStateUpdate: state.handleTreeStateUpdate
         });
-
-        // Store callback for tree rendering
         updateFolderStateCallback = treeLogicResult.updateFolderStateCallback;
 
-        // --- MODIFIED: Get folder sizes and pass to renderer ---
-        const folderSizes = repository.getFolderSizes(); // Get the calculated sizes
+        // Get calculated folder sizes
+        const folderSizes = repository.getFolderSizes();
 
-        // Render the tree, passing folderSizes
+        // Render the tree DOM
         renderTreeDOM(
             fileTreeContainer,
-            repoModule.fileTreeData, // Pass reference correctly
-            selectionState, // Use direct reference to loaded state
+            repoModule.fileTreeData,
+            selectionState,
             updateFolderStateCallback,
-            folderSizes // Pass the folder sizes map
+            folderSizes
         );
-        // --- END MODIFICATION ---
 
-        // Initialize actions module
+        // Initialize action handlers (Copy/Refresh buttons)
         initActions({
             copyButtonElement: copyButton,
             refreshButtonElement: refreshButton,
-            getRepoInfoCallback: repository.getRepoInfo,
+            getRepoInfoCallback: repository.getRepoInfo, // Provides owner, repo, actualRefUsed
             getSelectionStateCallback: state.getSelectionStateForActions,
             getFileTreeDataCallback: repository.getFileTreeData,
-            triggerRefreshCallback: handleRefresh // Use the local handler
+            triggerRefreshCallback: handleRefresh
         });
 
-        // Set up button listeners (Expand/Collapse)
+        // Setup Expand/Collapse listeners
         setupEventListeners();
 
-        // Update UI with initial state (selection count, button states)
-        // This now calls ui.updateControlsState indirectly
+        // Trigger initial UI update based on loaded state (counts, button enablement)
         state.handleTreeStateUpdate();
 
-        // Ensure all checkboxes reflect the current selection state visually
-        // updateCheckboxesFromState(selectionState); // Might be redundant if renderTreeDOM + updateFolderCheckboxStateCallback handle it
-
-        ui.clearMessages(); // Clear any loading messages
+        // Clear any lingering "Loading..." messages
+        ui.clearMessages();
 
         const endTime = performance.now();
         const loadTime = ((endTime - startTime) / 1000).toFixed(2);
         log('info', `[Popup Coordinator] Initialization successful in ${loadTime}s`);
         ui.updatePerformanceStats(`Load time: ${loadTime}s`);
-
+        ui.setRefreshDisabled(false); // Ensure refresh is enabled on success
 
     } catch (error) {
         log('error', "[Popup Coordinator] Initialization failed:", error);
 
-        // Check for specific error messages handled by repository module
-        if (error.message === "not_github" || error.message === "not_repo") {
-            // UI messages already handled by repository.detectRepository
-            log('info', `[Popup Coordinator] Expected condition: ${error.message}. UI handled by repository module.`);
-            // Ensure controls are correctly set for these states
-             ui.setControlsDisabled(); // Disable non-essential controls
-             ui.setRefreshDisabled(false); // Ensure refresh is possible
+        // Check for specific known errors handled by repository module
+        if (error.message === "not_github" || error.message === "not_repo" || error.message === "no_tab_url") {
+            log('info', `[Popup Coordinator] Known condition during init: ${error.message}. UI handled by repository module.`);
+            // UI messages and state are already set by detectRepository
+            ui.setControlsDisabled(); // Ensure non-essentials are disabled
+            ui.setRefreshDisabled(false); // Ensure refresh is possible
         } else {
-            // For genuine unexpected errors, display the error message
-            ui.showError(`Initialization failed: ${error.message}`);
-            ui.updateRepoTitle("Error Loading");
+            // For genuine unexpected errors
+            ui.showError(`Initialization failed unexpectedly: ${error.message}. Check console for details.`);
+            ui.updateRepoTitle("Error");
+            ui.updateRepoBranch(null); // Clear branch display
             ui.setControlsDisabled(); // Disable most controls
+            ui.setRefreshDisabled(false); // Allow refresh attempt
         }
 
-        ui.setRefreshDisabled(false); // Always allow refresh attempt on any error
         ui.updatePerformanceStats(""); // Clear perf stats on error
     }
-    // Removed finally block that just enabled refresh, as error paths handle it.
 }
 
-// cacheElements function remains the same...
-/**
- * Caches DOM elements for later use.
- */
+/** Caches DOM elements. */
 function cacheElements() {
-    log('info', "[Popup Coordinator] Caching DOM elements...");
+    // log('info', "[Popup Coordinator] Caching DOM elements..."); // Reduced logging
     fileTreeContainer = document.getElementById('file-tree-container');
     expandAllButton = document.getElementById('expand-all');
     collapseAllButton = document.getElementById('collapse-all');
     copyButton = document.getElementById('copy-button');
     refreshButton = document.getElementById('refresh-button');
 
-    if (!fileTreeContainer || !expandAllButton || !collapseAllButton || !copyButton || !refreshButton) {
-        log('warn', "[Popup Coordinator] One or more required DOM elements not found during caching.");
-        // Consider throwing an error if essential elements are missing, or handle gracefully.
+    // Basic check if essential elements are missing
+    if (!fileTreeContainer || !copyButton || !refreshButton) {
+        log('error', "[Popup Coordinator] CRITICAL: Essential DOM elements (tree container, copy/refresh buttons) not found!");
+        // Consider throwing an error or displaying a fatal UI error
+        // For now, logging error. Subsequent code will likely fail.
     }
 }
 
-// setupEventListeners function remains the same...
-/**
- * Sets up event listeners for UI elements like expand/collapse.
- * Action button listeners (Copy/Refresh) are set up in initActions.
- */
+/** Sets up event listeners for Expand/Collapse. */
 function setupEventListeners() {
-    log('info', "[Popup Coordinator] Setting up event listeners for expand/collapse...");
-
-    // Use a safe check before adding listeners
+    // log('info', "[Popup Coordinator] Setting up expand/collapse listeners..."); // Reduced logging
     expandAllButton?.addEventListener('click', treeLogic.expandAll);
     collapseAllButton?.addEventListener('click', treeLogic.collapseAll);
 }
 
 
-// handleStateUpdate function remains the same...
-/**
- * Handler for state updates from the state module.
- * Currently, the state module updates UI directly via popup_ui calls within its handleTreeStateUpdate.
- * This function could be used for more complex coordinator-level logic reacting to state changes if needed later.
- * @param {object} stateInfo - State information object passed from the state module's callback.
- */
+/** Handler for state updates (currently handled within state module itself). */
 function handleStateUpdate(stateInfo) {
-    // Example: log('log', "[Popup Coordinator] State update received:", stateInfo);
-    // The actual UI updates (selection count, button states) are triggered
-    // within state.handleTreeStateUpdate() which calls ui functions.
+    // log('log', "[Popup Coordinator] State update received (for potential coordinator logic):", stateInfo);
+    // Actual UI updates are triggered within state.handleTreeStateUpdate() -> ui functions
 }
 
-
-// updateCheckboxesFromState seems redundant now - renderTreeDOM sets initial checked state
-// and updateFolderCheckboxState (called by renderer and logic) handles folder states. Removing it for now.
-/*
-function updateCheckboxesFromState(selectionState) { ... }
-*/
-
-/**
- * Handler for refresh action.
- * Triggered when the refresh button is clicked via popup_actions.
- * Resets UI and re-initializes the entire application flow.
- */
-function handleRefresh() {
+/** Handler for the Refresh action. */
+async function handleRefresh() { // Made async for consistency, though initializeApp handles async internally
     log('info', "[Popup Coordinator] Refresh action triggered. Re-initializing application.");
     // Reset UI immediately
     ui.clearMessages();
     ui.updateRepoTitle("Refreshing...");
+    ui.updateRepoBranch(null); // Clear branch display
     ui.setControlsDisabled(); // Disable controls
-    ui.setRefreshDisabled(true); // Disable refresh button during refresh
+    ui.setRefreshDisabled(true); // Disable refresh button *during* refresh
     ui.updatePerformanceStats(""); // Clear old stats
 
     if (fileTreeContainer) {
-        fileTreeContainer.innerHTML = '<div class="loading-indicator">Loading file tree...</div>'; // Show loading indicator
-    } else {
-         log('warn', "[Popup Coordinator] File tree container not found during refresh.");
+        fileTreeContainer.innerHTML = '<div class="loading-indicator">Loading file tree...</div>';
     }
 
     // Re-initialize the application from scratch
-    // Wrap in a try/catch to ensure refresh button is re-enabled even if re-init fails
     try {
-         initializeApp(); // This is async but we don't necessarily need to await it here
-                         // It handles its own errors and UI updates.
+        await initializeApp(); // Await initialization to ensure completion before potential next actions
     } catch (error) {
-        log('error', "[Popup Coordinator] Error during refresh's initializeApp call:", error);
-         // initializeApp should handle its own UI error display.
-         // Ensure refresh is re-enabled if something unexpected goes wrong here.
-         ui.setRefreshDisabled(false);
+        // Should be caught by initializeApp's own try/catch, but as a safeguard:
+        log('error', "[Popup Coordinator] Error during refresh's initializeApp call (Coordinator level):", error);
+        ui.showError(`Refresh failed: ${error.message}`);
+        ui.setRefreshDisabled(false); // Ensure refresh is re-enabled if something unexpected goes wrong here
     }
-     // Note: initializeApp() handles re-enabling refresh on its completion/failure.
+    // Note: initializeApp() handles re-enabling refresh button on its own completion/failure paths.
 }
 
 export {

@@ -27,6 +27,7 @@ body {
     margin-bottom: 10px;
     padding-bottom: 10px;
     border-bottom: 1px solid #e1e4e8; /* GitHub border color */
+    min-height: 28px; /* Ensure consistent height */
 }
 
 .header h1 {
@@ -36,12 +37,32 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     flex-grow: 1;
-    margin-right: 15px; /* Space before buttons */
+    margin-right: 10px; /* Space before branch/buttons */
+    display: flex; /* Align title and branch */
+    align-items: baseline; /* Align text nicely */
+}
+
+/* NEW: Branch Display Styling */
+.repo-branch-display {
+    font-size: 0.85em;
+    font-weight: normal;
+    color: #586069; /* Secondary color */
+    background-color: #e1e4e8; /* Subtle background */
+    padding: 2px 6px;
+    border-radius: 10px; /* Pill shape */
+    margin-left: 8px; /* Space from repo name */
+    white-space: nowrap; /* Prevent wrapping */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px; /* Limit width */
+    display: inline-block; /* Allow max-width */
+    vertical-align: baseline;
 }
 
 .header .actions {
     display: flex;
     gap: 8px; /* Space between buttons */
+    flex-shrink: 0; /* Prevent action buttons shrinking */
 }
 
 /* Buttons */
@@ -109,8 +130,12 @@ button .icon {
     color: #d73a49; /* Red */
     border: 1px solid #ffdce0;
 }
+.error strong { /* Style title within friendly error */
+     display: block;
+     margin-bottom: 3px;
+}
 .error p {
-    margin-top: 5px;
+    margin-top: 0; /* Reset p margin */
     margin-bottom: 0;
     font-size: 0.92em;
 }
@@ -156,37 +181,6 @@ button .icon {
     color: #586069;
 }
 
-/* Non-GitHub notice styles */
-.non-github-notice {
-    text-align: center;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-}
-
-.non-github-notice img {
-    margin-bottom: 15px;
-    width: 64px;
-    height: 64px;
-    opacity: 0.7;
-}
-
-.non-github-notice h2 {
-    margin: 0 0 10px;
-    font-size: 16px;
-    color: #24292e;
-}
-
-.non-github-notice p {
-    margin: 0;
-    color: #586069;
-    font-size: 13px;
-    max-width: 300px;
-}
-
 /* Footer */
 .footer {
     margin-top: 10px;
@@ -212,8 +206,6 @@ button .icon {
 
 /* Style for each LI representing a file or folder */
 .tree-node {
-    /* REMOVED: display: flex; */
-    /* This LI should stack its children (content row and children UL) vertically */
     list-style: none; /* Ensure no list bullets */
     padding: 0; /* Control padding via children */
     margin: 0; /* Control margin via children */
@@ -237,11 +229,12 @@ button .icon {
 .toggler {
     margin-right: 4px;
     cursor: pointer;
-    display: inline-block; /* Or flex item if needed */
+    display: inline-block;
     width: 1em; /* Reserve space */
     text-align: center;
     flex-shrink: 0;
     user-select: none; /* Prevent text selection on toggle click */
+    color: #586069; /* Match subtle UI elements */
 }
 
 /* Label containing icon, name, meta */
@@ -259,8 +252,9 @@ button .icon {
     width: 16px;
     height: 16px;
     display: inline-block;
-    vertical-align: middle; /* Good fallback if flex alignment fails */
+    vertical-align: middle;
     flex-shrink: 0;
+    color: #6a737d; /* GitHub icon color */
 }
 
 /* File/Folder Name */
@@ -284,8 +278,7 @@ button .icon {
 .tree-node-children {
     list-style: none;
     padding-left: 0; /* Remove default UL padding */
-    margin-left: 25px; /* <<< Indentation for children - Adjusted from 20px inline style */
-                         /* Value can be tweaked for desired visual depth */
+    margin-left: 25px; /* Indentation for children */
 }
 
 /* Hide children UL when parent LI has 'collapsed' class */

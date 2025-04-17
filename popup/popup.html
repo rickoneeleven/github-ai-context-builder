@@ -9,15 +9,17 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1 id="repo-title">Loading Repository...</h1>
+            <!-- Modified h1 to include branch span -->
+            <h1 id="repo-title" title="Repository name">
+                Loading Repository...
+                <span id="repo-branch" class="repo-branch-display" title="Current branch/ref"></span>
+            </h1>
             <div class="actions">
                 <button id="copy-button" title="Copy selected file content to clipboard" disabled>
-                    <!-- MODIFIED: Use more common HTML entities for icons -->
-                    <span class="icon">⎘</span> Copy Context
+                    <span class="icon">📋</span> Copy Context
                 </button>
                 <button id="refresh-button" title="Refresh file tree">
-                    <!-- MODIFIED: Use more common HTML entities for icons -->
-                    <span class="icon">↻</span> Refresh
+                    <span class="icon">🔄</span> Refresh
                 </button>
             </div>
         </div>
@@ -41,8 +43,7 @@
         </div>
 
         <div class="footer">
-            <!-- Maybe add links or other info later -->
-             <span id="perf-stats" class="perf-stats"></span> <!-- Placeholder for performance info -->
+             <span id="perf-stats" class="perf-stats"></span>
         </div>
 
     </div>
