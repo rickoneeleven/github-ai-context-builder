@@ -1,6 +1,7 @@
 // File: popup/popup_repository.js
 import { log, formatBytes } from './popup_utils.js';
-import { parseRepoUrl, getRepoTree } from '../common/github_api.js';
+// Import specific functions and the custom error type
+import { parseRepoUrl, getRepoTree, ApiAuthError } from '../common/github_api.js';
 import * as ui from './popup_ui.js';
 import { getItemPathKey, getParentFolderPath } from './popup_utils.js';
 
@@ -10,8 +11,8 @@ console.log("[Popup Repository] Module loading...");
 let currentRepoUrl = null;
 let currentOwner = null;
 let currentRepo = null;
-let currentRef = null; // NEW: Store the detected ref (branch, tag, sha) or null for default
-let actualRefUsed = null; // NEW: Store the ref actually used by getRepoTree (might be default)
+let currentRef = null;
+let actualRefUsed = null;
 let fileTreeData = [];
 let isTruncated = false;
 let calculatedFolderSizes = {};
@@ -24,7 +25,7 @@ let calculatedFolderSizes = {};
  * @returns {object} Map of { folderPathKey: size }
  */
 function calculateAllFolderSizes(flatTreeData) {
-    // console.log('[Popup Repository] Starting calculation of all folder sizes...'); // Reduced logging
+    // console.log('[Popup Repository] Starting calculation of all folder sizes...');
     const startTime = performance.now();
     const fileSizes = {};
     const folderChildren = {};
@@ -63,14 +64,11 @@ function calculateAllFolderSizes(flatTreeData) {
             for (const childKey of folderChildren[pathKey]) {
                  if (allItemKeys.has(childKey)) {
                     totalSize += getSize(childKey);
-                 } else {
-                     // log('warn', `[Popup Repository] Skipping size calculation for unknown child key: ${childKey} (parent: ${pathKey})`); // Reduced logging
                  }
             }
             memo[pathKey] = totalSize;
             return totalSize;
         }
-        // log('warn', `[Popup Repository] Could not determine size for key: ${pathKey}`); // Reduced logging
         memo[pathKey] = 0;
         return 0;
     }
@@ -83,7 +81,8 @@ function calculateAllFolderSizes(flatTreeData) {
     }
 
     const endTime = performance.now();
-    log('info', `[Popup Repository] Folder size calculation complete in ${((endTime - startTime)).toFixed(1)}ms. Found sizes for ${Object.keys(finalFolderSizes).length} folders.`);
+    // Reduced logging for performance
+    // log('info', `[Popup Repository] Folder size calculation complete in ${((endTime - startTime)).toFixed(1)}ms. Found sizes for ${Object.keys(finalFolderSizes).length} folders.`);
 
     return finalFolderSizes;
 }
@@ -93,25 +92,25 @@ function calculateAllFolderSizes(flatTreeData) {
 
 /** Initializes the repository module. */
 function initRepository() {
-    log('info', "[Popup Repository] Initializing repository module...");
+    // log('info', "[Popup Repository] Initializing repository module..."); // Reduced noise
     resetRepositoryState();
-    log('info', "[Popup Repository] Repository module initialized");
+    // log('info', "[Popup Repository] Repository module initialized"); // Reduced noise
     return {
         fileTreeData,
         getRepoInfo,
         getFolderSizes,
-        getFileTreeData // Added for clarity, though already accessible via fileTreeData ref
+        getFileTreeData
     };
 }
 
 /** Resets all repository state variables. */
 function resetRepositoryState() {
-    log('info', '[Popup Repository] Resetting repository state');
+    // log('info', '[Popup Repository] Resetting repository state'); // Reduced noise
     currentRepoUrl = null;
     currentOwner = null;
     currentRepo = null;
-    currentRef = null; // NEW: Reset ref
-    actualRefUsed = null; // NEW: Reset actual ref used
+    currentRef = null;
+    actualRefUsed = null;
     fileTreeData.length = 0;
     isTruncated = false;
     calculatedFolderSizes = {};
@@ -121,7 +120,6 @@ function resetRepositoryState() {
 function isGitHubUrl(url) {
     try {
         const urlObj = new URL(url);
-        // Looser check for enterprise github instances (e.g. github.mycompany.com)
         return urlObj.hostname === 'github.com' || urlObj.hostname.includes('github.');
     } catch (error) {
         return false;
@@ -135,9 +133,9 @@ function isGitHubUrl(url) {
  * @returns {Promise<object | null>} Repository info object { url, owner, repo, ref } or null.
  */
 async function detectRepository() {
-    log('info', "[Popup Repository] Detecting repository from active tab...");
+    // log('info', "[Popup Repository] Detecting repository from active tab..."); // Reduced noise
     ui.updateRepoTitle("Detecting...", "Attempting to detect repository from URL");
-    ui.updateRepoBranch(null); // Clear branch initially
+    ui.updateRepoBranch(null);
 
     try {
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -145,16 +143,15 @@ async function detectRepository() {
         if (!tabs || tabs.length === 0 || !tabs[0].url) {
             log('warn', "[Popup Repository] Could not access the current tab URL immediately.");
             currentRepoUrl = null;
-             // Show specific error if URL couldn't be obtained
              ui.showFriendlyError("Cannot Access Tab", "Could not read the URL of the current tab.");
-             throw new Error("no_tab_url"); // Specific error
+             throw new Error("no_tab_url");
         }
 
         currentRepoUrl = tabs[0].url;
-        log('info', `[Popup Repository] Current URL: ${currentRepoUrl}`);
+        // log('info', `[Popup Repository] Current URL: ${currentRepoUrl}`); // Reduced noise
 
         if (!isGitHubUrl(currentRepoUrl)) {
-            log('info', "[Popup Repository] Not on a GitHub site. URL:", currentRepoUrl);
+            // log('info', "[Popup Repository] Not on a GitHub site. URL:", currentRepoUrl); // Reduced noise
             ui.showFriendlyError(
                 "Requires GitHub Page",
                 "Please navigate to a GitHub repository page and refresh."
@@ -162,11 +159,10 @@ async function detectRepository() {
             throw new Error("not_github");
         }
 
-        // Use the updated parseRepoUrl to get owner, repo, and ref
         const repoInfo = parseRepoUrl(currentRepoUrl);
 
         if (!repoInfo || !repoInfo.owner || !repoInfo.repo) {
-            log('info', "[Popup Repository] Not on a GitHub repository page or URL malformed. URL:", currentRepoUrl);
+            // log('info', "[Popup Repository] Not on a GitHub repository page or URL malformed. URL:", currentRepoUrl); // Reduced noise
             ui.showFriendlyError(
                  "Repository Not Found",
                  "Navigate to a repository's main page or code tab and refresh."
@@ -176,34 +172,30 @@ async function detectRepository() {
 
         currentOwner = repoInfo.owner;
         currentRepo = repoInfo.repo;
-        currentRef = repoInfo.ref; // Store the detected ref (can be null)
+        currentRef = repoInfo.ref;
 
-        log('info', `[Popup Repository] Detected repository: ${currentOwner}/${currentRepo}, Ref in URL: ${currentRef || 'None (implies default)'}`);
+        // log('info', `[Popup Repository] Detected repository: ${currentOwner}/${currentRepo}, Ref in URL: ${currentRef || 'None (implies default)'}`); // Reduced noise
 
-        // Update UI with detected info
         ui.updateRepoTitle(`${currentOwner}/${currentRepo}`, `Repository: ${currentOwner}/${currentRepo}`);
-        // Update branch display - pass null if ref wasn't in URL, ui fn will handle 'default' text
         ui.updateRepoBranch(currentRef);
 
         return {
             url: currentRepoUrl,
             owner: currentOwner,
             repo: currentRepo,
-            ref: currentRef // Return the ref detected from URL
+            ref: currentRef
         };
 
     } catch (error) {
-         // Re-throw specific known errors for coordinator
          if (error.message === "not_github" || error.message === "not_repo" || error.message === "no_tab_url") {
-             throw error;
+             throw error; // Re-throw known errors for coordinator
          }
-
          // Handle unexpected errors
-         log('error', "[Popup Repository] Unexpected error during repository detection:", error);
+         log('error', "[Popup Repository] Unexpected error during repository detection:", error); // Keep this error log
          ui.showError(`Repository detection failed: ${error.message}`);
          ui.updateRepoTitle("Detection Error");
-         ui.updateRepoBranch(null); // Clear branch on error
-         resetRepositoryState(); // Reset internal state
+         ui.updateRepoBranch(null);
+         resetRepositoryState();
          return null;
     }
 }
@@ -214,38 +206,32 @@ async function detectRepository() {
  * @returns {Promise<boolean>} True if data fetch and processing was successful, false otherwise.
  */
 async function fetchRepositoryData() {
-    // Ensure owner/repo were detected successfully first
     if (!currentOwner || !currentRepo) {
+         // This log should ideally not happen if detectRepository works, but keep as error just in case
          log('error', "[Popup Repository] Cannot fetch data: Owner or repo not detected.");
-         // UI error likely shown by detectRepository already
          return false;
     }
-    log('info', `[Popup Repository] Fetching repository data for ${currentOwner}/${currentRepo} (Ref: ${currentRef || 'default'})`);
+    // log('info', `[Popup Repository] Fetching repository data for ${currentOwner}/${currentRepo} (Ref: ${currentRef || 'default'})`); // Reduced noise
 
-    // Update status with the intended ref
     const fetchStatusRef = currentRef ? `ref ${currentRef}` : 'default branch';
     ui.showStatus(`Fetching file tree for ${currentOwner}/${currentRepo} (${fetchStatusRef})...`);
 
     try {
-        // Pass the detected ref (which might be null) to getRepoTree
         const repoTreeResult = await getRepoTree(currentOwner, currentRepo, currentRef);
 
         const validTreeData = repoTreeResult.tree.filter(item =>
             item && item.path && (item.type === 'blob' || item.type === 'tree')
         );
 
-        // Update module state
         fileTreeData.length = 0;
         fileTreeData.push(...validTreeData);
         isTruncated = repoTreeResult.truncated;
-        actualRefUsed = repoTreeResult.ref; // Store the ref API confirmed it used
+        actualRefUsed = repoTreeResult.ref;
 
-        log('info', `[Popup Repository] Received ${fileTreeData.length} valid tree items. Truncated: ${isTruncated}. Actual Ref Used: ${actualRefUsed}`);
+        // log('info', `[Popup Repository] Received ${fileTreeData.length} valid tree items. Truncated: ${isTruncated}. Actual Ref Used: ${actualRefUsed}`); // Reduced noise
 
-        // Update UI with the actual ref used (in case default was resolved)
-        // Only update if it differs from what was initially displayed or if initial was null
         if (currentRef !== actualRefUsed) {
-             log('info', `[Popup Repository] Updating UI branch display to actual ref used: ${actualRefUsed}`);
+             // log('info', `[Popup Repository] Updating UI branch display to actual ref used: ${actualRefUsed}`); // Reduced noise
              ui.updateRepoBranch(actualRefUsed);
         }
 
@@ -254,22 +240,37 @@ async function fetchRepositoryData() {
         } else if (isTruncated) {
             ui.showStatus(`Warning: Repository tree for ref '${actualRefUsed}' is large and may be incomplete.`, true);
         } else {
-            ui.clearMessages(); // Clear status only if no warning/empty message needed
+            ui.clearMessages();
         }
 
-        // Calculate Folder Sizes
-        ui.showStatus("Calculating folder sizes..."); // Show temporary status
+        ui.showStatus("Calculating folder sizes...");
         calculatedFolderSizes = calculateAllFolderSizes(fileTreeData);
-        ui.clearMessages(); // Clear status after calculation
+        ui.clearMessages();
 
         return true;
 
     } catch (error) {
-        log('error', `[Popup Repository] Failed to fetch or process repository data for ref '${currentRef || 'default'}':`, error);
-        ui.showError(`Error loading data for ${fetchStatusRef}: ${error.message}. Check console.`);
+        // --- MODIFIED CATCH BLOCK ---
+        if (error instanceof ApiAuthError) {
+            // Log handled auth error with 'info' level for regular console, not 'error'
+            log('info', `[Popup Repository] Handled ApiAuthError fetching data for ref '${currentRef || 'default'}':`, error.message);
+            // If it's the specific 404/Auth error, show the friendly message
+            ui.showFriendlyError(
+                "Private Repository Access Denied",
+                "Could not fetch data. This might be a private repository. Please ensure a valid GitHub Personal Access Token (PAT) with 'repo' scope is added in the extension options."
+            );
+            ui.updateRepoTitle("Access Denied"); // Update title appropriately
+        } else {
+            // For all other *unexpected* errors, log with 'error' and show generic message
+            log('error', `[Popup Repository] Failed to fetch or process repository data for ref '${currentRef || 'default'}':`, error); // LOG UNEXPECTED ERRORS HERE
+            ui.showError(`Error loading data for ${fetchStatusRef}: ${error.message}. Check console.`);
+            ui.updateRepoTitle("Error Loading Data");
+        }
+        // --- END MODIFIED CATCH BLOCK ---
+
+        // Common cleanup for any error during fetch
         resetRepositoryState();
-        ui.updateRepoTitle("Error Loading Data"); // Update title on fetch error
-        ui.updateRepoBranch(null); // Clear branch display on fetch error
+        ui.updateRepoBranch(null);
         return false;
     }
 }
@@ -280,7 +281,7 @@ function getRepoInfo() {
         url: currentRepoUrl,
         owner: currentOwner,
         repo: currentRepo,
-        ref: actualRefUsed, // Return the ref confirmed by the API
+        ref: actualRefUsed,
         isTruncated
     };
 }
@@ -305,4 +306,4 @@ export {
     getFolderSizes
 };
 
-console.log("[Popup Repository] Module loaded.");
+// console.log("[Popup Repository] Module loaded."); // Reduced noise
