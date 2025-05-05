@@ -1,16 +1,24 @@
 // File: popup/popup_state.js
-import { log, formatBytes } from './popup_utils.js';
+// Import getItemPathKey along with other utils
+import { log, formatBytes, getItemPathKey } from './popup_utils.js';
 import { getRepoSelectionState, setRepoSelectionState } from '../common/storage.js';
-import * as ui from './popup_ui.js';
+// Import the specific UI functions needed
+import { updateSelectionInfo, updateTokenEstimate, updateControlsState } from './popup_ui.js';
 
-console.log("[Popup State] Module loading...");
+// console.log("[Popup State] Module loading...");
 
 // --- State Variables ---
-let selectionState = {};   // Tracks selection state of each file/folder
-let fileTreeData = [];     // Reference to file tree data (owned by repository module)
+let selectionState = {};   // Tracks selection state { [pathKey]: boolean }
+let fileTreeData = [];     // Reference to file tree data from repository module
 let totalSelectedFiles = 0;
 let totalSelectedSize = 0;
-let currentRepoUrl = null; // Need this for persistence
+let currentRepoUrl = null; // Used for persistence key
+
+// --- Configuration ---
+const BYTES_PER_TOKEN_ESTIMATE = 4; // Heuristic for estimation
+
+// --- Callback ---
+let onStateUpdateCallback = null; // Optional: For coordinator if needed
 
 // --- Public API ---
 
@@ -19,24 +27,26 @@ let currentRepoUrl = null; // Need this for persistence
  * @param {object} config - Configuration object
  * @param {Array<object>} config.fileTreeDataRef - Reference to file tree data array
  * @param {string} config.repoUrl - Current repository URL
- * @param {Function} config.onStateUpdateCallback - Function to call when state changes
+ * @param {Function} config.onStateUpdateCallback - Function to call when state changes (optional)
  */
 function initState(config) {
-    log('info', "[Popup State] Initializing state module...");
-    
-    if (!config || !config.fileTreeDataRef || !config.repoUrl || typeof config.onStateUpdateCallback !== 'function') {
+    // log('info', "[Popup State] Initializing state module...");
+
+    if (!config || !Array.isArray(config.fileTreeDataRef) || !config.repoUrl) {
         log('error', "[Popup State] Invalid initialization config:", config);
         throw new Error("State module initialization failed: Invalid configuration");
     }
-    
-    fileTreeData = config.fileTreeDataRef; // Store reference to the same array
+
+    fileTreeData = config.fileTreeDataRef; // Store reference
     currentRepoUrl = config.repoUrl;
-    onStateUpdateCallback = config.onStateUpdateCallback;
-    
+    if (typeof config.onStateUpdateCallback === 'function') {
+        onStateUpdateCallback = config.onStateUpdateCallback;
+    }
+
     // Reset state to start fresh
     resetState();
-    
-    log('info', "[Popup State] State module initialized");
+
+    // log('info', "[Popup State] State module initialized");
     return { selectionState }; // Return reference to the state object
 }
 
@@ -44,85 +54,86 @@ function initState(config) {
  * Resets the state variables to their defaults.
  */
 function resetState() {
-    log('info', '[Popup State] Resetting internal state.');
+    // log('info', '[Popup State] Resetting internal state.');
     selectionState = {}; // Create a new object
     totalSelectedFiles = 0;
     totalSelectedSize = 0;
 }
 
 /**
- * Loads saved selection state from storage or defaults to all selected.
+ * Loads saved selection state from storage or defaults based on current tree.
  * Updates the internal selection state object and returns a reference to it.
  * @returns {Promise<object>} - Promise resolving to the selection state object reference
  */
 async function loadAndApplySelectionState() {
-    log('info', "[Popup State] Loading selection state...");
-    
+    // log('info', "[Popup State] Loading selection state...");
+
     if (!currentRepoUrl) {
         log('error', "[Popup State] Cannot load state: repository URL not set");
         return selectionState;
     }
-    
-    const persistedState = await getRepoSelectionState(currentRepoUrl);
-    selectionState = {}; // Start fresh
+
+    let persistedState = null;
+    try {
+        persistedState = await getRepoSelectionState(currentRepoUrl);
+    } catch (error) {
+        log('error', "[Popup State] Error loading persisted state from storage:", error);
+    }
+
+    selectionState = {}; // Start fresh for application
 
     // Get current keys from file tree data
-    const currentKeys = new Set(fileTreeData.map(item => 
-        item && item.path ? 
-            (item.type === 'tree' ? `${item.path}/` : item.path) : 
-            null
+    const currentKeys = new Set(fileTreeData.map(item =>
+        item?.path ? getItemPathKey(item) : null // Use util, handle potential invalid items
     ).filter(Boolean));
 
-    if (persistedState) {
-        log('info', "[Popup State] Applying persisted selection state");
-        
-        // Apply persisted values for existing files/folders
+    if (persistedState && typeof persistedState === 'object') {
+        // log('info', "[Popup State] Applying persisted selection state");
+
         for (const key in persistedState) {
             if (currentKeys.has(key)) {
-                selectionState[key] = persistedState[key];
-            } else {
-                log('log', `[Popup State] Pruning stale key from loaded state: ${key}`);
+                selectionState[key] = !!persistedState[key]; // Ensure boolean
             }
         }
-        
-        // Set defaults for new files/folders
+
         currentKeys.forEach(key => {
-            if (selectionState[key] === undefined) {
-                log('log', `[Popup State] Setting default 'true' for new/missing key: ${key}`);
+            if (!(key in selectionState)) {
                 selectionState[key] = true; // Default new items to selected
             }
         });
     } else {
-        log('info', "[Popup State] No persisted state found, defaulting to all selected");
-        
-        // Default all to selected
+        // log('info', "[Popup State] No valid persisted state found, defaulting all to selected");
         currentKeys.forEach(key => {
             selectionState[key] = true;
         });
     }
-    
-    // Calculate initial totals
-    calculateSelectedTotals();
-    return selectionState;
+
+    // Calculate initial totals and update UI immediately after loading
+    handleTreeStateUpdate(); // Trigger UI update based on loaded state
+
+    return selectionState; // Return reference
 }
 
 /**
- * Calculates the total number and size of selected files.
- * Updates the global totalSelectedFiles and totalSelectedSize variables.
+ * Calculates the total number, size, and estimated tokens of selected files.
+ * Updates the internal totalSelectedFiles and totalSelectedSize variables.
+ * @returns {{count: number, size: number, formattedSize: string, estimatedTokens: number}} Metrics object
  */
 function calculateSelectedTotals() {
     let count = 0;
     let size = 0;
-    
+
+    if (!Array.isArray(fileTreeData)) {
+        log('warn', '[Popup State] Cannot calculate totals: fileTreeData is not available or not an array.');
+        return { count: 0, size: 0, formattedSize: '0 B', estimatedTokens: 0 };
+    }
+
     for (const pathKey in selectionState) {
-        // Only count files (not folders) that are explicitly selected (true)
         if (selectionState[pathKey] === true && !pathKey.endsWith('/')) {
-            const fileData = fileTreeData.find(item => 
-                item && 
-                item.path === pathKey && 
-                item.type === 'blob'
+            const fileData = fileTreeData.find(item =>
+                item?.path === pathKey && item?.type === 'blob'
             );
-            
+
             if (fileData && typeof fileData.size === 'number') {
                 count++;
                 size += fileData.size;
@@ -131,38 +142,38 @@ function calculateSelectedTotals() {
             }
         }
     }
-    
+
     totalSelectedFiles = count;
     totalSelectedSize = size;
-    
-    return { 
-        count: totalSelectedFiles, 
-        size: totalSelectedSize, 
-        formattedSize: formatBytes(totalSelectedSize) 
+
+    const estimatedTokens = Math.round(totalSelectedSize / BYTES_PER_TOKEN_ESTIMATE);
+
+    return {
+        count: totalSelectedFiles,
+        size: totalSelectedSize,
+        formattedSize: formatBytes(totalSelectedSize),
+        estimatedTokens: estimatedTokens
     };
 }
 
-// --- Callback for state changes ---
-let onStateUpdateCallback = null;
 
 /**
- * Called when the selection state changes. Updates UI and triggers callback.
+ * Called when the selection state changes (e.g., via tree logic).
+ * Recalculates totals, updates UI elements (count, size, tokens, button states),
+ * and triggers the optional external callback.
  */
 function handleTreeStateUpdate() {
-    log('log', '[Popup State] Handling state update...');
-    
-    // Recalculate selected totals
-    const { count, formattedSize } = calculateSelectedTotals();
-    
-    // Update UI with new totals
-    ui.updateSelectionInfo(count, formattedSize);
-    
-    // Determine button states based on selection
-    const hasItems = fileTreeData.length > 0;
+    // log('log', '[Popup State] Handling state update...');
+
+    const { count, formattedSize, estimatedTokens } = calculateSelectedTotals();
+
+    updateSelectionInfo(count, formattedSize);
+    updateTokenEstimate(estimatedTokens);
+
+    const hasItems = fileTreeData && fileTreeData.length > 0;
     const hasSelection = count > 0;
-    ui.updateControlsState(hasItems, hasSelection);
-    
-    // Notify any parent component that registered for updates
+    updateControlsState(hasItems, hasSelection);
+
     if (onStateUpdateCallback) {
         onStateUpdateCallback({
             hasItems,
@@ -178,55 +189,62 @@ function handleTreeStateUpdate() {
  * @returns {Promise<boolean>} - Whether the save was successful
  */
 async function saveSelectionState() {
-    log('log', "[Popup State] Saving selection state...");
-    
+    // log('log', "[Popup State] Saving selection state...");
+
     if (!currentRepoUrl) {
         log('error', "[Popup State] Cannot save state: repository URL not set");
         return false;
     }
-    
+
     try {
-        const success = await setRepoSelectionState(currentRepoUrl, selectionState);
-        
+        const stateToSave = { ...selectionState };
+        const success = await setRepoSelectionState(currentRepoUrl, stateToSave);
+
         if (!success) {
-            log('error', "[Popup State] Failed to persist selection state");
+            log('error', "[Popup State] Failed to persist selection state (setRepoSelectionState returned false).");
             return false;
         }
-        
+        // log('info', "[Popup State] Selection state persisted successfully.");
         return true;
     } catch (error) {
-        log('error', "[Popup State] Error persisting selection state:", error);
+        log('error', "[Popup State] Exception during state persistence:", error);
         return false;
     }
 }
 
 /**
  * Gets current state information for actions module.
- * @returns {object} Current selection state
+ * @returns {object} Current selection state (direct reference for efficiency)
  */
 function getSelectionStateForActions() {
-    return selectionState; // Return direct reference
+    return selectionState;
 }
 
 /**
- * Gets the current selection metrics.
- * @returns {object} Object with count, size, and formatted size
+ * Gets the current selection metrics (count, size, estimate).
+ * @returns {object} Object with count, size, formattedSize, and estimatedTokens
  */
 function getSelectionMetrics() {
     return {
         count: totalSelectedFiles,
         size: totalSelectedSize,
-        formattedSize: formatBytes(totalSelectedSize)
+        formattedSize: formatBytes(totalSelectedSize),
+        estimatedTokens: Math.round(totalSelectedSize / BYTES_PER_TOKEN_ESTIMATE)
     };
 }
 
 /**
- * Updates the repository URL for state persistence.
+ * Updates the repository URL used for state persistence key.
  * @param {string} repoUrl - The new repository URL
  */
 function updateRepoUrl(repoUrl) {
     if (repoUrl && typeof repoUrl === 'string') {
-        currentRepoUrl = repoUrl;
+        if (currentRepoUrl !== repoUrl) {
+            // log('info', `[Popup State] Updating repository URL for persistence: ${repoUrl}`);
+            currentRepoUrl = repoUrl;
+        }
+    } else {
+        log('warn', '[Popup State] Attempted to update repo URL with invalid value:', repoUrl);
     }
 }
 
@@ -234,12 +252,12 @@ export {
     initState,
     resetState,
     loadAndApplySelectionState,
-    calculateSelectedTotals,
-    handleTreeStateUpdate,
+    // calculateSelectedTotals, // Internal
+    handleTreeStateUpdate, // Core update trigger
     saveSelectionState,
-    getSelectionStateForActions,
-    getSelectionMetrics,
-    updateRepoUrl
+    getSelectionStateForActions, // For copy action
+    getSelectionMetrics, // For potentially displaying metrics elsewhere
+    updateRepoUrl // For coordinator to set on init/refresh
 };
 
-console.log("[Popup State] Module loaded.");
+// console.log("[Popup State] Module loaded.");

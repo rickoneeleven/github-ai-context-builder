@@ -32,7 +32,8 @@
             <button id="collapse-all" title="Collapse all folders">Collapse All</button>
             <div class="selection-info">
                  <span id="selected-count">Selected: 0 files</span> |
-                 <span id="selected-size">Total Size: 0 B</span>
+                 <span id="selected-size">Total Size: 0 B</span> |
+                 <span id="selected-tokens" title="Estimated token count based on file size (approx. 4 bytes/token)">Est. Tokens: ~0</span>
             </div>
         </div>
 
@@ -48,6 +49,6 @@
 
     </div>
     <!-- Import logic script as module -->
-    <script type="module" src="popup.js"></script>
+    <script type="module" src="../dist/popup_bundle.js"></script>
 </body>
 </html>
