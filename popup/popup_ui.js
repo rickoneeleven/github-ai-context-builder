@@ -1,8 +1,6 @@
 // File: popup/popup_ui.js
 import { log } from './popup_utils.js'; // log is primarily for errors/warnings now
 
-// console.log("[Popup UI] Module loading..."); // Removed module load noise
-
 // --- Constants ---
 const REFRESH_ICON_BUSY = '🔄'; // Unicode refresh symbol
 const COPY_ICON_DEFAULT = '📋'; // Unicode clipboard symbol
@@ -19,8 +17,10 @@ let errorMessageElement = null;
 let expandAllButton = null;
 let collapseAllButton = null;
 let selectedCountElement = null;
-let selectedSizeElement = null;
-let selectedTokensElement = null; // Added
+// Removed: selectedSizeElement = null;
+// Removed: selectedTokensElement = null;
+let selectedSizeFooterElement = null; // Added for footer
+let selectedTokensFooterElement = null; // Added for footer
 let fileTreeContainer = null;
 let perfStatsElement = null;
 
@@ -31,7 +31,6 @@ let originalCopyButtonHTML = '';
  * Initializes the UI module by caching DOM element references.
  */
 function initUI() {
-    // log('info', "[Popup UI] Initializing UI element references..."); // Reduced verbosity
     repoTitleElement = document.getElementById('repo-title');
     repoBranchElement = document.getElementById('repo-branch');
     copyButton = document.getElementById('copy-button');
@@ -41,8 +40,9 @@ function initUI() {
     expandAllButton = document.getElementById('expand-all');
     collapseAllButton = document.getElementById('collapse-all');
     selectedCountElement = document.getElementById('selected-count');
-    selectedSizeElement = document.getElementById('selected-size');
-    selectedTokensElement = document.getElementById('selected-tokens'); // Added
+    // Added: cache new footer elements
+    selectedSizeFooterElement = document.getElementById('selected-size-footer');
+    selectedTokensFooterElement = document.getElementById('selected-tokens-footer');
     fileTreeContainer = document.getElementById('file-tree-container');
     perfStatsElement = document.getElementById('perf-stats');
 
@@ -62,11 +62,13 @@ function initUI() {
         log('warn', "[Popup UI] Repo branch element not found during init.");
     }
 
-    if (!selectedTokensElement) { // Added check
-        log('warn', "[Popup UI] Selected tokens element not found during init.");
+    // Updated checks for new footer elements
+    if (!selectedSizeFooterElement) {
+        log('warn', "[Popup UI] Selected size footer element not found during init.");
     }
-
-    // log('info', "[Popup UI] UI element references initialized."); // Reduced verbosity
+    if (!selectedTokensFooterElement) {
+        log('warn', "[Popup UI] Selected tokens footer element not found during init.");
+    }
 }
 
 // --- Message Display Functions ---
@@ -78,16 +80,14 @@ function initUI() {
  */
 function showStatus(message, isWarning = false) {
     if (!statusMessageElement || !errorMessageElement) {
-        // Keep warning if essential UI element is missing
         log('warn', "[Popup UI] Status/Error element not found for message:", message);
         return;
     }
-    // log('info', `[Popup UI] Status: ${message} ${isWarning ? '(Warning)' : ''}`); // Removed routine status logging
     errorMessageElement.classList.add('hidden');
     errorMessageElement.textContent = '';
     statusMessageElement.textContent = message;
     statusMessageElement.classList.remove('hidden');
-    statusMessageElement.classList.toggle('error', isWarning); // Use .error class for warning style too
+    statusMessageElement.classList.toggle('error', isWarning);
     statusMessageElement.classList.toggle('status', !isWarning);
 }
 
@@ -97,11 +97,9 @@ function showStatus(message, isWarning = false) {
  */
 function showError(message) {
     if (!statusMessageElement || !errorMessageElement) {
-         // Keep warning if essential UI element is missing
          log('warn', "[Popup UI] Status/Error element not found for error message:", message);
          return;
     }
-    // Log errors explicitly displayed to the user
     log('error', `[Popup UI] Error displayed: ${message}`);
     statusMessageElement.classList.add('hidden');
     statusMessageElement.textContent = '';
@@ -120,7 +118,6 @@ function showFriendlyError(title, description) {
         log('warn', "[Popup UI] Status/Error element not found for friendly error message");
         return;
     }
-    // Log friendly errors as info, as they are handled conditions
     log('info', `[Popup UI] Friendly error displayed: ${title} - ${description}`);
     statusMessageElement.classList.add('hidden');
     statusMessageElement.textContent = '';
@@ -130,14 +127,14 @@ function showFriendlyError(title, description) {
         <p>${description}</p>
     `;
     errorMessageElement.classList.remove('hidden');
-    errorMessageElement.classList.add('error'); // Still uses error styling
+    errorMessageElement.classList.add('error');
 
     if (fileTreeContainer) {
-        fileTreeContainer.innerHTML = ''; // Clear tree area
+        fileTreeContainer.innerHTML = '';
     }
     setControlsDisabled();
-    setRefreshDisabled(false); // Always allow refresh attempt
-    updateRepoBranch(null); // Clear branch display
+    setRefreshDisabled(false);
+    updateRepoBranch(null);
 }
 
 /** Clears status or error messages. */
@@ -200,33 +197,35 @@ function updateRepoBranch(refName) {
 
 
 /**
- * Updates selected file count and total size.
+ * Updates selected file count (in controls) and total size (in footer).
  * @param {number} count - Number of selected files.
- * @param {string} formattedSize - Human-readable size string.
+ * @param {string} formattedSize - Human-readable size string for the footer.
  */
 function updateSelectionInfo(count, formattedSize) {
     if (selectedCountElement) {
         selectedCountElement.textContent = `Selected: ${count} file${count !== 1 ? 's' : ''}`;
     }
-    if (selectedSizeElement) {
-        selectedSizeElement.textContent = `Total Size: ${formattedSize}`;
+    // Updated: Target the footer element for size
+    if (selectedSizeFooterElement) {
+        selectedSizeFooterElement.textContent = `Total Size: ${formattedSize}`;
+    } else {
+        log('warn', "[Popup UI] Selected size footer element not found for update.");
     }
 }
 
 /**
- * Updates the estimated token count display.
+ * Updates the estimated token count display in the footer.
  * @param {number} estimatedTokens - The calculated estimate.
  */
 function updateTokenEstimate(estimatedTokens) {
-    if (selectedTokensElement) {
-        // Format with 'k' for thousands if over 1000
+    // Updated: Target the footer element for tokens
+    if (selectedTokensFooterElement) {
         const displayTokens = estimatedTokens >= 1000
             ? `${(estimatedTokens / 1000).toFixed(1)}k`
             : estimatedTokens;
-        selectedTokensElement.textContent = `Est. Tokens: ~${displayTokens}`;
+        selectedTokensFooterElement.textContent = `Est. Tokens: ~${displayTokens}`;
     } else {
-        // Only warn if the element was expected but not found during update
-        log('warn', "[Popup UI] Selected tokens element not found for update.");
+        log('warn', "[Popup UI] Selected tokens footer element not found for update.");
     }
 }
 
@@ -244,7 +243,6 @@ function updatePerformanceStats(text) {
 
 /** Sets initial disabled state for controls. */
 function setControlsDisabled() {
-    // log('info', "[Popup UI] Disabling most controls."); // Reduced verbosity
     if (copyButton) copyButton.disabled = true;
     if (expandAllButton) expandAllButton.disabled = true;
     if (collapseAllButton) collapseAllButton.disabled = true;
@@ -268,7 +266,6 @@ function setRefreshDisabled(disabled) {
  * @param {boolean} hasSelection - Whether files are selected.
  */
 function updateControlsState(hasItems, hasSelection) {
-    // log('info', `[Popup UI] Updating controls state. hasItems: ${hasItems}, hasSelection: ${hasSelection}`); // Reduced verbosity
     if (copyButton) {
         const isBusy = copyButton.dataset.busy === 'true';
         copyButton.disabled = isBusy || !hasSelection;
@@ -301,10 +298,8 @@ function setCopyButtonBusy(isBusy) {
         copyButton.innerHTML = `<span class="icon">${REFRESH_ICON_BUSY}</span> Copying...`;
     } else {
         copyButton.innerHTML = originalCopyButtonHTML;
-        // Ensure icon is reset if original HTML didn't explicitly contain it
         const iconElement = copyButton.querySelector('.icon');
         if (iconElement) iconElement.textContent = COPY_ICON_DEFAULT;
-        // Caller should call updateControlsState to set final enabled/disabled state
     }
 }
 
@@ -316,13 +311,11 @@ export {
     clearMessages,
     updateRepoTitle,
     updateRepoBranch,
-    updateSelectionInfo,
-    updateTokenEstimate, // Exported
+    updateSelectionInfo, // Updates count (controls) and size (footer)
+    updateTokenEstimate, // Updates tokens (footer)
     updatePerformanceStats,
     setControlsDisabled,
     setRefreshDisabled,
     updateControlsState,
     setCopyButtonBusy
 };
-
-// console.log("[Popup UI] Module loaded."); // Removed module load noise

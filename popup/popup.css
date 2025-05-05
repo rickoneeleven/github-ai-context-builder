@@ -42,7 +42,7 @@ body {
     align-items: baseline; /* Align text nicely */
 }
 
-/* NEW: Branch Display Styling */
+/* Branch Display Styling */
 .repo-branch-display {
     font-size: 0.85em;
     font-weight: normal;
@@ -146,13 +146,19 @@ button .icon {
 /* Controls below header */
 .controls {
     display: flex;
-    justify-content: space-between;
+    justify-content: space-between; /* Push buttons left, count right */
     align-items: center;
     margin-bottom: 8px;
-    padding: 5px;
-    background-color: #f1f1f1;
-    border-radius: 4px;
+    padding: 5px 8px; /* Adjust padding */
+    background-color: #f1f1f1; /* Slightly different background */
+    border-radius: 6px;
     font-size: 0.9em;
+    min-height: 26px; /* Ensure minimum height */
+}
+
+.control-buttons { /* NEW: Wrapper for left buttons */
+    display: flex;
+    gap: 6px; /* Space between expand/collapse */
 }
 
 .controls button {
@@ -160,8 +166,10 @@ button .icon {
     padding: 3px 8px;
 }
 
-.selection-info {
+.selection-info { /* Now only contains the count */
     color: #586069; /* GitHub secondary text */
+    font-weight: 500;
+    white-space: nowrap;
 }
 
 
@@ -173,6 +181,7 @@ button .icon {
     background-color: #fff;
     padding: 10px;
     border-radius: 6px;
+    margin-bottom: 8px; /* Add margin below tree */
 }
 
 .loading-indicator {
@@ -183,16 +192,28 @@ button .icon {
 
 /* Footer */
 .footer {
-    margin-top: 10px;
-    padding-top: 10px;
+    display: flex; /* Use flexbox */
+    justify-content: space-between; /* Space out children */
+    align-items: baseline; /* Align text nicely */
+    padding-top: 8px; /* Reduced top padding */
     border-top: 1px solid #e1e4e8;
     font-size: 0.85em;
     color: #586069;
-    text-align: right;
+}
+
+.footer-selection-info { /* Container for size and tokens */
+    display: flex;
+    gap: 15px; /* Space between size and tokens */
+}
+
+.footer span { /* General styling for footer spans */
+     white-space: nowrap;
 }
 
 .perf-stats {
     font-style: italic;
+    margin-left: auto; /* Push performance stats to the far right */
+    padding-left: 10px; /* Ensure space from other footer content */
 }
 
 /* --- Tree Node Styling --- */
