@@ -1,0 +1,1 @@
+- still getting errors showing up in chrome extension errors because a user has clicked the extension when not on a github site. this is a user error, not an extension error!!!! i don't want to bloody see it.
