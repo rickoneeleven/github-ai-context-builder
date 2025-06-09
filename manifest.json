@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GitHub AI Context Builder",
-  "version": "25.06.09.1618",
+  "version": "25.06.09.1623",
   "description": "Select files from a GitHub repository page and copy their content formatted for AI context.",
   "permissions": [
     "activeTab",
