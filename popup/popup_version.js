@@ -30,7 +30,7 @@ async function shouldCheck() {
     const result = await chrome.storage.local.get(['lastVersionCheck']);
     const lastCheck = result.lastVersionCheck;
     
-    if (!lastCheck) return true;
+    if (!lastCheck || !lastCheck.time) return true;
     
     const hoursSinceLastCheck = (Date.now() - lastCheck.time) / (1000 * 60 * 60);
     return hoursSinceLastCheck >= 24;
@@ -51,7 +51,7 @@ async function updateVersionDisplay() {
     
     // Update last checked time
     let lastCheckedText = 'Never';
-    if (result.lastVersionCheck) {
+    if (result.lastVersionCheck && result.lastVersionCheck.time) {
         lastCheckedText = formatLastChecked(result.lastVersionCheck.time);
     }
     document.getElementById('last-checked').textContent = lastCheckedText;
