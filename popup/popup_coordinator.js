@@ -6,6 +6,7 @@ import * as state from './popup_state.js';
 import { renderTreeDOM } from './popup_tree_renderer.js';
 import * as treeLogic from './popup_tree_logic.js';
 import { initActions } from './popup_actions.js';
+import { initVersionChecker } from './popup_version.js';
 
 // console.log("[Popup Coordinator] Module loading..."); // Reduced noise
 
@@ -112,6 +113,9 @@ async function initializeApp() {
 
         // Setup Expand/Collapse listeners
         setupEventListeners();
+
+        // Initialize version checker UI
+        initVersionChecker();
 
         // Trigger initial UI update based on loaded state (counts, button enablement)
         state.handleTreeStateUpdate();

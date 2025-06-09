@@ -311,3 +311,56 @@ button .icon {
 .folder > .tree-node-content > label {
     font-weight: 500; /* Slightly bolder folders */
 }
+
+/* Version info section */
+.version-info {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #f6f8fa;
+    border-top: 1px solid #e1e4e8;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85em;
+}
+
+.version-details {
+    display: flex;
+    gap: 15px;
+    color: #586069;
+}
+
+.version-details span {
+    white-space: nowrap;
+}
+
+.version-details #current-version,
+.version-details #latest-version,
+.version-details #last-checked {
+    font-weight: 500;
+    color: #24292e;
+}
+
+.check-updates-btn {
+    padding: 4px 12px;
+    background-color: #fff;
+    border: 1px solid #d1d5da;
+    border-radius: 6px;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.check-updates-btn:hover {
+    background-color: #f3f4f6;
+    border-color: #586069;
+}
+
+.check-updates-btn:active {
+    background-color: #e9e9e9;
+}
+
+.check-updates-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

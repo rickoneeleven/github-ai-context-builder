@@ -42,5 +42,22 @@ export default [
         include: ['options/**', 'common/**'],
         exclude: 'node_modules/**'
     }
+  },
+  // Configuration for the background script
+  {
+    input: 'background.js', // Entry point for the background service worker
+    output: {
+      file: 'dist/background_bundle.js', // Where to output the bundled file
+      format: 'esm', // ES Module format for service worker
+      sourcemap: 'inline',
+    },
+    plugins: [
+      resolve(),
+      commonjs()
+    ],
+    watch: {
+        include: ['background.js', 'common/**'],
+        exclude: 'node_modules/**'
+    }
   }
 ];
