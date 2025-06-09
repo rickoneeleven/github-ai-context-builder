@@ -54,12 +54,35 @@ export async function checkForUpdates(forceCheck = false) {
         
         console.log(`Current version: ${currentVersion}, Remote version: ${remoteVersion}`);
         
-        if (compareVersions(remoteVersion, currentVersion) > 0) {
+        const updateAvailable = compareVersions(remoteVersion, currentVersion) > 0;
+        
+        if (updateAvailable) {
             console.log('Update available!');
             showUpdateNotification(currentVersion, remoteVersion);
+            console.log('Setting badge to "!"');
+            try {
+                chrome.action.setBadgeText({ text: '!' });
+                chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
+                console.log('Badge set successfully');
+            } catch (error) {
+                console.error('Error setting badge:', error);
+            }
         } else {
             console.log('Extension is up to date');
+            console.log('Clearing badge');
+            try {
+                chrome.action.setBadgeText({ text: '' });
+                console.log('Badge cleared successfully');
+            } catch (error) {
+                console.error('Error clearing badge:', error);
+            }
         }
+        
+        chrome.storage.local.set({ 
+            lastVersionCheck: now,
+            latestVersion: remoteVersion,
+            updateAvailable: updateAvailable
+        });
     } catch (error) {
         console.error('Error checking for updates:', error);
     }
@@ -85,6 +108,14 @@ chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) =
 });
 
 export async function initVersionChecker() {
+    const stored = await chrome.storage.local.get(['updateAvailable']);
+    console.log('Stored update status:', stored);
+    if (stored.updateAvailable) {
+        console.log('Restoring update badge on init');
+        chrome.action.setBadgeText({ text: '!' });
+        chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
+    }
+    
     await checkForUpdates(true);
     
     setInterval(() => {
