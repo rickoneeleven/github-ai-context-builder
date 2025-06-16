@@ -19,6 +19,12 @@ export async function initVersionChecker() {
         checkButton.addEventListener('click', handleCheckNow);
     }
     
+    // Set up test badge button
+    const testBadgeButton = document.getElementById('test-badge-button');
+    if (testBadgeButton) {
+        testBadgeButton.addEventListener('click', handleTestBadge);
+    }
+    
     // Initial display update
     await updateVersionDisplay();
     
@@ -64,6 +70,13 @@ async function updateVersionDisplay() {
         document.getElementById('latest-version').style.color = '';
         document.getElementById('latest-version').style.fontWeight = '';
     }
+}
+
+async function handleTestBadge() {
+    console.log('[popup_version] Test badge button clicked');
+    chrome.runtime.sendMessage({ action: 'setBadge', show: true }, (response) => {
+        console.log('[popup_version] Badge test response:', response);
+    });
 }
 
 async function handleCheckNow() {
@@ -198,4 +211,29 @@ window.clearVersionCache = function() {
         console.log('[popup_version] DEBUG: Version cache cleared');
         updateVersionDisplay();
     });
+};
+
+// Debug function to force badge update based on current version status
+window.testBadge = async function() {
+    console.log('[popup_version] DEBUG: Testing badge functionality');
+    const manifest = chrome.runtime.getManifest();
+    const currentVersion = manifest.version;
+    const result = await chrome.storage.local.get(['latestVersion']);
+    const latestVersion = result.latestVersion;
+    
+    console.log(`Current: ${currentVersion}, Latest: ${latestVersion}`);
+    
+    if (latestVersion && compareVersions(latestVersion, currentVersion) > 0) {
+        console.log('[popup_version] DEBUG: Setting badge for available update');
+        chrome.runtime.sendMessage({ action: 'setBadge', show: true });
+    } else {
+        console.log('[popup_version] DEBUG: Clearing badge (up to date)');
+        chrome.runtime.sendMessage({ action: 'setBadge', show: false });
+    }
+};
+
+// Debug function to manually trigger background version check
+window.forceVersionCheck = function() {
+    console.log('[popup_version] DEBUG: Forcing background version check');
+    chrome.runtime.sendMessage({ action: 'forceVersionCheck' });
 };

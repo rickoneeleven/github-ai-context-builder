@@ -108,25 +108,39 @@ chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) =
 });
 
 export async function initVersionChecker() {
-    const stored = await chrome.storage.local.get(['updateAvailable']);
+    console.log('Initializing version checker...');
+    
+    // Always check stored state and restore badge if needed
+    const stored = await chrome.storage.local.get(['updateAvailable', 'latestVersion']);
     console.log('Stored update status:', stored);
+    
+    // Restore badge from stored state
     if (stored.updateAvailable) {
         console.log('Restoring update badge on init');
         chrome.action.setBadgeText({ text: '!' });
         chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
+    } else {
+        // Ensure badge is clear if no update available
+        console.log('Clearing badge on init (no update available)');
+        chrome.action.setBadgeText({ text: '' });
     }
     
+    // Force immediate check on init
+    console.log('Forcing immediate version check on init...');
     await checkForUpdates(true);
     
+    // Set up periodic checks
     setInterval(() => {
         checkForUpdates();
     }, CHECK_INTERVAL_MS);
     
     chrome.runtime.onStartup.addListener(() => {
+        console.log('Browser startup - checking for updates');
         checkForUpdates(true);
     });
     
     chrome.runtime.onInstalled.addListener(() => {
+        console.log('Extension installed/updated - checking for updates');
         checkForUpdates(true);
     });
 }

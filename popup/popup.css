@@ -341,7 +341,13 @@ button .icon {
     color: #24292e;
 }
 
-.check-updates-btn {
+.version-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.check-updates-btn,
+.test-badge-btn {
     padding: 4px 12px;
     background-color: #fff;
     border: 1px solid #d1d5da;
@@ -351,16 +357,30 @@ button .icon {
     transition: all 0.2s;
 }
 
-.check-updates-btn:hover {
+.test-badge-btn {
+    background-color: #fff5f5;
+    border-color: #fed7d7;
+    color: #c53030;
+}
+
+.check-updates-btn:hover,
+.test-badge-btn:hover {
     background-color: #f3f4f6;
     border-color: #586069;
 }
 
-.check-updates-btn:active {
+.test-badge-btn:hover {
+    background-color: #fed7d7;
+    border-color: #f56565;
+}
+
+.check-updates-btn:active,
+.test-badge-btn:active {
     background-color: #e9e9e9;
 }
 
-.check-updates-btn:disabled {
+.check-updates-btn:disabled,
+.test-badge-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
