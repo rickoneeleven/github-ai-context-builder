@@ -51,3 +51,5 @@ There are two ways to do this:
 3.  Click the "Load unpacked" button.
 4.  Select the root directory of this project (`github-ai-context-builder`).
 5.  The extension should now be loaded and active. Remember to click the reload icon for the extension on the `chrome://extensions` page after running `npm run build` or after `npm run watch` has finished rebuilding following your code changes.
+
+test change, ignore me - hi little fella
