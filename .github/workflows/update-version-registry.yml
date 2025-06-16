@@ -4,6 +4,8 @@ on:
   push:
     branches: 
       - main
+    paths:
+      - 'manifest.json'  # Only trigger when version has been updated
 
 jobs:
   update-registry:
