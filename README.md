@@ -1,4 +1,4 @@
-# GitHub AI Context Builder 
+# GitHub AI Context Builder - Auto-Versioning Test 
 
 
 This Chrome extension allows users to select files from a GitHub repository and copy their combined content to the clipboard, formatted for use as context with AI models. It uses the GitHub API to fetch repository file trees and content.
