@@ -6,6 +6,9 @@ on:
     paths-ignore:
       - 'manifest.json'  # Prevent infinite loops from auto-version commits
 
+permissions:
+  contents: write  # Allow workflow to push commits back to repository
+
 jobs:
   auto-version:
     runs-on: ubuntu-latest
