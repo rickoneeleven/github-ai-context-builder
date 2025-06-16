@@ -15,3 +15,5 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onStartup.addListener(() => {
     console.log('Browser started');
 });
+
+// Test change to trigger atomic versioning workflow - 2025-06-16

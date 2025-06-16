@@ -1,0 +1,86 @@
+name: Auto Version and Update Registry
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'manifest.json'  # Prevent infinite loops
+
+permissions:
+  contents: write  # For updating manifest.json
+
+jobs:
+  version-and-registry:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Update version in manifest.json
+      run: node update-version.js
+      
+    - name: Check if version changed
+      id: version_check
+      run: |
+        if git diff --quiet manifest.json; then
+          echo "changed=false" >> $GITHUB_OUTPUT
+        else
+          NEW_VERSION=$(jq -r '.version' manifest.json)
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Version updated to: $NEW_VERSION"
+        fi
+        
+    - name: Commit version bump
+      if: steps.version_check.outputs.changed == 'true'
+      run: |
+        git config user.name "Version Bot"
+        git config user.email "actions@github.com"
+        git add manifest.json
+        git commit -m "Auto-version bump to ${{ steps.version_check.outputs.version }}"
+        git push
+        
+    - name: Checkout version registry
+      if: steps.version_check.outputs.changed == 'true'
+      uses: actions/checkout@v4
+      with:
+        repository: rickoneeleven/extension-versions
+        token: ${{ secrets.REGISTRY_PAT }}
+        path: registry
+        
+    - name: Update versions.json
+      if: steps.version_check.outputs.changed == 'true'
+      run: |
+        cd registry
+        
+        # Create versions.json if it doesn't exist
+        if [ ! -f versions.json ]; then
+          echo '{}' > versions.json
+        fi
+        
+        # Update the version for this extension
+        jq --arg version "${{ steps.version_check.outputs.version }}" \
+           '.["github-ai-context-builder"] = $version' \
+           versions.json > versions.tmp.json
+        mv versions.tmp.json versions.json
+        
+        echo "Updated registry to version: ${{ steps.version_check.outputs.version }}"
+        cat versions.json
+        
+    - name: Commit registry update
+      if: steps.version_check.outputs.changed == 'true'
+      run: |
+        cd registry
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        git add versions.json
+        git commit -m "Update github-ai-context-builder to version ${{ steps.version_check.outputs.version }}"
+        git push
