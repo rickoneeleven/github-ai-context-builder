@@ -44,5 +44,5 @@ jobs:
         git config user.name "Version Bot"
         git config user.email "actions@github.com"
         git add manifest.json
-        git commit -m "Auto-version bump [skip ci]"
+        git commit -m "Auto-version bump"
         git push
