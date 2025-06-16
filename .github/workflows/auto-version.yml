@@ -1,0 +1,45 @@
+name: Auto Version on Push
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'manifest.json'  # Prevent infinite loops from auto-version commits
+
+jobs:
+  auto-version:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Update version
+      run: node update-version.js
+      
+    - name: Check if version changed
+      id: version_check
+      run: |
+        if git diff --quiet manifest.json; then
+          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "No version change needed"
+        else
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "Version updated, committing changes"
+        fi
+        
+    - name: Commit version bump
+      if: steps.version_check.outputs.changed == 'true'
+      run: |
+        git config user.name "Version Bot"
+        git config user.email "actions@github.com"
+        git add manifest.json
+        git commit -m "Auto-version bump [skip ci]"
+        git push
